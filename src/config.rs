@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::env;
 
 use crate::errors::ResultExt;
 use crate::Error;
@@ -13,7 +14,13 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new<W>(working_dir: W) -> Result<Self, Error>
+    pub fn from_env() -> Result<Self, Error> {
+        let home = env::var("HOME").unwrap_or(".".into());
+        let working_dir = Path::new(home.as_str()).join(".tc-cache");
+        Config::from(working_dir)
+    }
+    
+    pub fn from<W>(working_dir: W) -> Result<Self, Error>
     where
         W: AsRef<Path>,
     {

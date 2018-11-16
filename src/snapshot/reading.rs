@@ -8,7 +8,7 @@ use memmap::{Mmap, MmapOptions};
 use crate::bytes::FromLeBytes;
 use crate::errors::ResultExt;
 use crate::snapshot::{BUFFER_SIZE, VERSION, VERSION_LEN, Entry};
-use crate::Error;
+use crate::{Error, Stats};
 
 #[derive(Debug)]
 pub struct Reading<R = ()> {
@@ -38,6 +38,9 @@ impl Reading {
 
 impl<R: Read> Reading<R> {
     fn check_version(&mut self) -> Result<(), Error> {
+        let stats = Stats::current().unpacking().timer();
+        stats.bytes(VERSION_LEN);
+        
         let src = &mut self.reader;
         let mut buf: [u8; VERSION_LEN] = [0; VERSION_LEN];
 
@@ -52,6 +55,8 @@ impl<R: Read> Reading<R> {
         }
     }
     pub fn read_entry(&mut self) -> Result<Option<(Entry, usize)>, Error> {
+        let stats = Stats::current().unpacking().timer();
+        
         let src = &mut self.reader;
         let mut buf: [u8; 4] = [0; 4];
 
@@ -68,11 +73,17 @@ impl<R: Read> Reading<R> {
         src.read_exact(&mut buf).snapshot_err("Read entry failed")?;
 
         let entry = serde_cbor::from_slice(&buf).snapshot_err("Read entry failed")?;
+        let len = buf.len() + 4;
 
-        Ok(Some((entry, buf.len() + 4)))
+        stats.bytes(len);
+
+        Ok(Some((entry, len)))
     }
 
     pub fn copy_to<W: Write>(&mut self, dst: &mut W, mut len: usize) -> Result<usize, Error> {
+        let stats = Stats::current().unpacking().timer();
+        stats.bytes(len);
+            
         let src = &mut self.reader;
         let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
         let mut written: usize = 0;
@@ -94,6 +105,9 @@ impl<R: Read> Reading<R> {
     }
 
     pub fn skip(&mut self, len: usize) -> Result<usize, Error> {
+        let stats = Stats::current().unpacking().timer();
+        stats.bytes(len);
+        
         let mut null = Null;
         self.copy_to(&mut null, len)
     }

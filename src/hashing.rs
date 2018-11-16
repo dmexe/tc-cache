@@ -3,6 +3,8 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
 
 use digest_md5::{Digest, Md5};
 
+use crate::Stats;
+
 const MEM_MAP_THRESHOLD: usize = 64 * 1024; // 64k
 
 pub mod md5 {
@@ -27,6 +29,9 @@ pub mod md5 {
 
 #[inline]
 fn hash_bytes<D: Digest>(buf: &[u8], mut hasher: D) -> String {
+    let stats = Stats::current().hashing().timer();
+    stats.bytes(buf.len());
+    
     hasher.input(buf);
     let result = hasher.result();
     hex::encode(&result)
@@ -40,6 +45,9 @@ fn hash_file<D: Digest>(file: &mut File, mut hasher: D, len: usize) -> Result<St
         len
     );
 
+    let stats = Stats::current().hashing().timer();
+    stats.bytes(len);
+
     let mut buf: [u8; MEM_MAP_THRESHOLD] = [0; MEM_MAP_THRESHOLD];
     file.read_exact(&mut buf[0..len])?;
 
@@ -50,6 +58,9 @@ fn hash_file<D: Digest>(file: &mut File, mut hasher: D, len: usize) -> Result<St
 }
 
 fn hash_mapped_file<D: Digest>(file: &File, mut hasher: D, len: usize) -> Result<String, IoError> {
+    let stats = Stats::current().hashing().timer();
+    stats.bytes(len);
+    
     let mut opts = memmap::MmapOptions::new();
     opts.len(len as usize);
 

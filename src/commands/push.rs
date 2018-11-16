@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use log::warn;
+use log::{warn, info};
 
 use crate::errors::ResultExt;
 use crate::snapshot::{Pack, Writing};
@@ -29,6 +29,8 @@ impl<'a> Push<'a> {
         if !cfg.cached_entries_file.exists() {
             warn!("No files from a previous snapshot, assume it isn't cached before");
         }
+        
+        info!("Creating a new snapshot ...");
 
         let snapshot = Writing::open(&cfg.snapshot_file)?;
         snapshot.pack(&cached_dirs)?;
@@ -59,9 +61,9 @@ mod tests {
     fn push() {
         let work = testing::temp_dir();
         let dst = testing::temp_dir();
-        let cfg = Config::new(&work).unwrap();
+        let cfg = Config::from(&work).unwrap();
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
-        let pull = Pull::new(&cfg, dirs.clone()).unpack_prefix(&dst);
+        let pull = Pull::new(&cfg, dirs.clone(), Some(dst));
         let push = Push::new(&cfg);
 
         pull.run().unwrap();

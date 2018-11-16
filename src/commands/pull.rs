@@ -17,18 +17,14 @@ pub struct Pull<'a> {
 }
 
 impl<'a> Pull<'a> {
-    pub fn new(cfg: &'a Config, cached_dirs: Vec<PathBuf>) -> Self {
+    pub fn new<P>(cfg: &'a Config, cached_dirs: Vec<PathBuf>, unpack_prefix: Option<P>) -> Self 
+    where
+        P: AsRef<Path>
+    {
         Pull {
             cfg,
             cached_dirs,
-            unpack_prefix: None,
-        }
-    }
-
-    pub fn unpack_prefix<P: AsRef<Path>>(self, path: P) -> Pull<'a> {
-        Pull {
-            unpack_prefix: Some(path.as_ref().to_path_buf()),
-            .. self
+            unpack_prefix: unpack_prefix.map(|it| it.as_ref().to_path_buf())
         }
     }
 
@@ -115,8 +111,8 @@ mod tests {
         let dst = testing::temp_dir();
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
 
-        let cfg = Config::new(work.as_ref()).unwrap();
-        let command = Pull::new(&cfg, dirs).unpack_prefix(dst);
+        let cfg = Config::from(work.as_ref()).unwrap();
+        let command = Pull::new(&cfg, dirs, Some(dst));
 
         command.run().unwrap();
     }
