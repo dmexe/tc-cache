@@ -133,25 +133,24 @@ mod tests {
             let file_entry = Entry::try_from_path(B_FILE_PATH).unwrap();
             snapshot.write_entry(&file_entry).unwrap();
 
-            let (path, _, _, size) = file_entry.as_file().unwrap();
-            let size = size as usize;
+            let (path, _, _, len) = file_entry.as_file().unwrap();
             let mut file = File::open(&path).io_err(&path).unwrap();
 
-            snapshot.write_file(&mut file, &path, size).unwrap();
+            snapshot.write_file(&mut file, &path, len).unwrap();
             snapshot.flush().unwrap();
         }
 
         {
             let mut snapshot = Reading::open(&dst).unwrap();
             let (file_entry, _) = snapshot.read_entry().unwrap().unwrap();
-            let (path, _, md5, size) = file_entry.as_file().unwrap();
+            let (path, _, md5, len) = file_entry.as_file().unwrap();
 
             assert_eq!(path, Path::new(B_FILE_PATH));
             assert_eq!(md5, "54510be579370aa078fbb9c5d9eed53a");
-            assert_eq!(size, 82944);
+            assert_eq!(len, 82944);
 
             let mut buf = Vec::new();
-            snapshot.copy_to(&mut buf, size as usize).unwrap();
+            snapshot.copy_to(&mut buf, len).unwrap();
 
             let actual = hasher::md5_bytes(&buf);
             assert_eq!(md5, actual);

@@ -97,19 +97,23 @@ impl StdError for Error {
 }
 
 pub trait ResultExt<T, E> {
-    fn io_err<P: AsRef<Path>>(self, path: P) -> Result<T, Error>;
-    fn snapshot_err<S: Into<String>>(self, message: S) -> Result<T, Error>;
+    fn io_err<P>(self, path: P) -> Result<T, Error>
+    where P: AsRef<Path>;
+    
+    fn snapshot_err<S>(self, message: S) -> Result<T, Error>
+    where S: Into<String>;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E>
 where
     E: Into<Cause>,
 {
-    fn io_err<P: AsRef<Path>>(self, path: P) -> Result<T, Error> {
+    fn io_err<P>(self, path: P) -> Result<T, Error> where P: AsRef<Path> {
         self.map_err(Error::io(path))
     }
 
-    fn snapshot_err<S: Into<String>>(self, message: S) -> Result<T, Error> {
+    fn snapshot_err<S>(self, message: S) -> Result<T, Error> where S: Into<String> {
         self.map_err(Error::snapshot(message))
     }
 }
+

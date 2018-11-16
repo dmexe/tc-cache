@@ -36,8 +36,8 @@ impl<R: Read> Unpack for Reading<R> {
             read += len;
 
             if !is_include(dirs, entry.as_ref()) {
-                if let Some((_, _, _, size)) = entry.as_file() {
-                    self.skip(size as usize)?;
+                if let Some((_, _, _, len)) = entry.as_file() {
+                    self.skip(len)?;
                 }
                 continue;
             }
@@ -54,9 +54,9 @@ impl<R: Read> Unpack for Reading<R> {
                 // restore_attributes(&path, &attr) only for osx
             }
 
-            if let Some((path, attr, _, size)) = entry.as_file() {
+            if let Some((path, attr, _, len)) = entry.as_file() {
                 let path = prefixed(path);
-                let len = unpack_file(&mut self, &path, size as usize)?;
+                let len = unpack_file(&mut self, &path, len)?;
                 restore_attributes(&path, &attr)?;
 
                 read += len;

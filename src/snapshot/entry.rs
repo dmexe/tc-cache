@@ -4,6 +4,8 @@ use std::fs::File;
 use std::os::unix::fs::MetadataExt as UnixMetadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::convert::TryInto;
+use std::fmt::Display;
 
 use log::error;
 use rayon::prelude::ParallelIterator;
@@ -48,7 +50,7 @@ pub enum Entry {
         path: PathBuf,
         attr: Attributes,
         md5: String,
-        size: u64,
+        len: u32,
     },
     #[serde(rename = "s")]
     Symlink {
@@ -61,18 +63,22 @@ pub enum Entry {
 }
 
 impl Entry {
-    pub fn file<P, A, M>(path: P, attr: A, md5: M, size: u64) -> Self
+    pub fn file<P, A, M, L>(path: P, attr: A, md5: M, len: L) -> Result<Self, Error>
     where
         P: AsRef<Path>,
         A: Into<Attributes>,
         M: Into<String>,
+        L: TryInto<u32>,
+        L::Error: Display + Sized,
     {
-        Entry::File {
+        let len = len.try_into().map_err(|err| err.to_string()).io_err(&path)?;
+
+        Ok(Entry::File {
             path: path.as_ref().to_path_buf(),
             attr: attr.into(),
             md5: md5.into(),
-            size,
-        }
+            len
+        })
     }
 
     pub fn symlink<P, T, A>(path: P, target: T, attr: A) -> Self
@@ -145,23 +151,23 @@ impl Entry {
 
         if file_type.is_file() {
             let file = File::open(path).io_err(&path)?;
-            let len = meta.len();
+            let len = meta.len() as usize;
             let md5 = hasher::md5_with_len(file, len as usize).io_err(&path)?;
-            return Ok(Entry::file(path, meta, md5, len));
+            return Entry::file(path, meta, md5, len);
         }
 
         let err = "Unknown file type, neither of a file nor a directory nor a symlink";
         Err(Error::io(path)(err))
     }
 
-    pub fn as_file(&self) -> Option<(&Path, &Attributes, &str, u64)> {
+    pub fn as_file(&self) -> Option<(&Path, &Attributes, &str, usize)> {
         match self {
             Entry::File {
                 ref path,
                 ref attr,
                 ref md5,
-                size,
-            } => Some((path.as_path(), attr, md5.as_str(), *size)),
+                len,
+            } => Some((path.as_path(), attr, md5.as_str(), *len as usize)),
             _ => None,
         }
     }
@@ -219,10 +225,10 @@ mod tests {
     #[test]
     fn entry_from_path() {
         let file = Entry::try_from_path(A_FILE_PATH).unwrap();
-        let (path, _, md5, size) = file.as_file().unwrap();
+        let (path, _, md5, len) = file.as_file().unwrap();
 
         assert_eq!(path.as_os_str(), A_FILE_PATH);
-        assert_eq!(size, 1);
+        assert_eq!(len, 1);
         assert_eq!(md5, "0cc175b9c0f1b6a831c399e269772661");
     }
 

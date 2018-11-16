@@ -120,10 +120,9 @@ mod tests {
         let written = snapshot.write_entry(&file_entry).unwrap();
         assert_eq!(written, 120);
 
-        let (path, _, _, size) = file_entry.as_file().unwrap();
-        let size = size as usize;
+        let (path, _, _, len) = file_entry.as_file().unwrap();
         let mut file = File::open(&path).io_err(&path).unwrap();
-        let written = snapshot.write_file(&mut file, &path, size).unwrap();
+        let written = snapshot.write_file(&mut file, &path, len).unwrap();
         assert_eq!(written, 82944);
 
         snapshot.flush().unwrap();

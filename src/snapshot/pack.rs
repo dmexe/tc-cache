@@ -22,10 +22,9 @@ impl<W: Write> Pack for Writing<W> {
         for entry in read_entries(dirs)? {
             written += self.write_entry(&entry)?;
 
-            if let Some((path, _, _, size)) = entry.as_file() {
-                let size = size as usize;
+            if let Some((path, _, _, len)) = entry.as_file() {
                 let mut file = File::open(&path).io_err(&path)?;
-                written += self.write_file(&mut file, &path, size)?;
+                written += self.write_file(&mut file, &path, len)?;
             }
         }
         self.flush()?;

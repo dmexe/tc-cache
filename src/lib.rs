@@ -1,3 +1,4 @@
+#![feature(try_from)]
 #![warn(rust_2018_idioms)]
 #![allow(unstable_name_collisions)]
 
