@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::bytes::IntoLeBytes;
 use crate::errors::ResultExt;
-use crate::snapshot::{MEM_MAP_THRESHOLD, O_DIRECT, VERSION, Entry};
+use crate::snapshot::{Entry, MEM_MAP_THRESHOLD, O_DIRECT, VERSION};
 use crate::{Error, Stats};
 
 #[derive(Debug)]
@@ -36,22 +36,18 @@ impl Writing {
 
 impl<W: Write> Writing<W> {
     fn write_version(&mut self) -> Result<(), Error> {
-        let stats = Stats::current().packing().timer();
-        stats.bytes(VERSION.len());
-        
+        Stats::current().packing().inc(VERSION.len());
+
         self.writer
             .write_all(VERSION)
             .snapshot_err("Write version header failed")
     }
 
     pub fn flush(&mut self) -> Result<(), Error> {
-        let _stats = Stats::current().packing().timer();
         self.writer.flush().snapshot_err("Flush failed")
     }
 
     pub fn write_entry(&mut self, entry: &Entry) -> Result<usize, Error> {
-        let stats = Stats::current().packing().timer();
-        
         let meta = serde_cbor::to_vec(entry).snapshot_err("Create metadata failed")?;
         let mut written: usize = 0;
 
@@ -71,9 +67,8 @@ impl<W: Write> Writing<W> {
                 .snapshot_err("Write metadata bytes failed")?;
             written += bytes.len();
         };
-        
-        stats.bytes(written);
-        
+
+        Stats::current().packing().inc(written);
         Ok(written)
     }
 
@@ -81,8 +76,8 @@ impl<W: Write> Writing<W> {
     where
         P: AsRef<Path>,
     {
-        let stats = Stats::current().packing().timer();
-        
+        Stats::current().packing().inc(len);
+
         if len == 0 {
             return Ok(0);
         }
@@ -104,8 +99,6 @@ impl<W: Write> Writing<W> {
                 .write_all(mapped.as_ref())
                 .snapshot_err("Write data failed")?;
         }
-        
-        stats.bytes(len);
 
         Ok(len)
     }
@@ -118,8 +111,8 @@ mod tests {
     use std::fs::File;
 
     use crate::errors::ResultExt;
-    use crate::testing::{self, B_FILE_PATH};
     use crate::snapshot::Entry;
+    use crate::testing::{self, B_FILE_PATH};
 
     #[test]
     fn write_file_entry() {

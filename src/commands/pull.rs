@@ -7,7 +7,7 @@ use serde_json;
 
 use crate::errors::ResultExt;
 use crate::snapshot::{Reading, Unpack};
-use crate::{Config, Error};
+use crate::{Config, Error, Stats};
 
 #[derive(Debug)]
 pub struct Pull<'a> {
@@ -17,14 +17,14 @@ pub struct Pull<'a> {
 }
 
 impl<'a> Pull<'a> {
-    pub fn new<P>(cfg: &'a Config, cached_dirs: Vec<PathBuf>, unpack_prefix: Option<P>) -> Self 
+    pub fn new<P>(cfg: &'a Config, cached_dirs: Vec<PathBuf>, unpack_prefix: Option<P>) -> Self
     where
-        P: AsRef<Path>
+        P: AsRef<Path>,
     {
         Pull {
             cfg,
             cached_dirs,
-            unpack_prefix: unpack_prefix.map(|it| it.as_ref().to_path_buf())
+            unpack_prefix: unpack_prefix.map(|it| it.as_ref().to_path_buf()),
         }
     }
 
@@ -50,8 +50,13 @@ impl<'a> Pull<'a> {
             return Ok(());
         }
 
-        let snapshot = Reading::open(&cfg.snapshot_file)?;
-        let (entries, _) = snapshot.unpack(unpack_prefix, &cached_dirs)?;
+        info!("Unpacking snapshot ...");
+
+        let (entries, _) = {
+            let _timer = Stats::current().unpacking().timer();
+            let snapshot = Reading::open(&cfg.snapshot_file)?;
+            snapshot.unpack(unpack_prefix, &cached_dirs)?
+        };
 
         write_json(&cfg.cached_entries_file, &entries)?;
 

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use filetime::{self, FileTime};
 
 use crate::errors::ResultExt;
-use crate::snapshot::{Reading, O_DIRECT, Entry, Attributes};
+use crate::snapshot::{Attributes, Entry, Reading, O_DIRECT};
 use crate::Error;
 
 pub trait Unpack {

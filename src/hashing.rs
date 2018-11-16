@@ -9,7 +9,7 @@ const MEM_MAP_THRESHOLD: usize = 64 * 1024; // 64k
 
 pub mod md5 {
     use super::*;
-    
+
     pub fn file(mut file: File, len: usize) -> Result<String, IoError> {
         let hasher = Md5::new();
 
@@ -31,7 +31,7 @@ pub mod md5 {
 fn hash_bytes<D: Digest>(buf: &[u8], mut hasher: D) -> String {
     let stats = Stats::current().hashing().timer();
     stats.bytes(buf.len());
-    
+
     hasher.input(buf);
     let result = hasher.result();
     hex::encode(&result)
@@ -60,7 +60,7 @@ fn hash_file<D: Digest>(file: &mut File, mut hasher: D, len: usize) -> Result<St
 fn hash_mapped_file<D: Digest>(file: &File, mut hasher: D, len: usize) -> Result<String, IoError> {
     let stats = Stats::current().hashing().timer();
     stats.bytes(len);
-    
+
     let mut opts = memmap::MmapOptions::new();
     opts.len(len as usize);
 
@@ -75,22 +75,26 @@ fn hash_mapped_file<D: Digest>(file: &File, mut hasher: D, len: usize) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use std::path::Path;
-    
+
     use crate::testing::{A_FILE_PATH, B_FILE_PATH};
 
     #[test]
     fn md5_for_regular_file() {
         let len = Path::new(A_FILE_PATH).metadata().unwrap().len() as usize;
-        let hash = File::open(A_FILE_PATH).and_then(|f| md5::file(f, len) ).unwrap();
+        let hash = File::open(A_FILE_PATH)
+            .and_then(|f| md5::file(f, len))
+            .unwrap();
         assert_eq!(hash, "0cc175b9c0f1b6a831c399e269772661")
     }
 
     #[test]
     fn md5_for_mapped_file() {
         let len = Path::new(B_FILE_PATH).metadata().unwrap().len() as usize;
-        let hash = File::open(B_FILE_PATH).and_then(|f| md5::file(f, len) ).unwrap();
+        let hash = File::open(B_FILE_PATH)
+            .and_then(|f| md5::file(f, len))
+            .unwrap();
         assert_eq!(hash, "54510be579370aa078fbb9c5d9eed53a")
     }
 }

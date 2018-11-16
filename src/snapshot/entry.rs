@@ -1,11 +1,12 @@
+use std::cmp::PartialEq;
 use std::convert::From;
+use std::convert::TryInto;
+use std::fmt::Display;
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt as UnixMetadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::convert::TryInto;
-use std::fmt::Display;
 
 use log::error;
 use rayon::prelude::ParallelIterator;
@@ -13,10 +14,9 @@ use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::errors::ResultExt;
-use crate::hashing;
-use crate::Error;
+use crate::{hashing, Error, Stats};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Attributes {
     pub mode: u32,
     pub atime: i64,
@@ -32,6 +32,13 @@ impl Attributes {
 impl<T: UnixMetadata> From<T> for Attributes {
     fn from(metadata: T) -> Self {
         Attributes::new(metadata.mode(), metadata.atime(), metadata.mtime())
+    }
+}
+
+impl PartialEq<Attributes> for Attributes {
+    #[inline]
+    fn eq(&self, other: &Attributes) -> bool {
+        self.mode == other.mode
     }
 }
 
@@ -71,13 +78,16 @@ impl Entry {
         L: TryInto<u32>,
         L::Error: Display + Sized,
     {
-        let len = len.try_into().map_err(|err| err.to_string()).io_err(&path)?;
+        let len = len
+            .try_into()
+            .map_err(|err| err.to_string())
+            .io_err(&path)?;
 
         Ok(Entry::File {
             path: path.as_ref().to_path_buf(),
             attr: attr.into(),
             md5: md5.into(),
-            len
+            len,
         })
     }
 
@@ -118,6 +128,8 @@ impl Entry {
 
         rayon::spawn(move || {
             for it in walker {
+                Stats::current().walking().inc(1);
+
                 let it = it.map(DirEntry::into_path);
 
                 if tx.send(it).is_err() {
@@ -130,6 +142,39 @@ impl Entry {
         rx.into_iter()
             .par_bridge()
             .map(move |it| it.io_err(&path).and_then(Entry::try_from_path))
+    }
+
+    pub fn walk_into_vec<P>(dirs: &[P]) -> Result<Vec<Entry>, Error>
+    where
+        P: AsRef<Path>,
+    {
+        use rayon::prelude::*;
+
+        type Memo = Vec<Entry>;
+        type Item = Result<Entry, Error>;
+
+        let folder = |mut memo: Memo, item: Item| {
+            let item = item?;
+            memo.push(item);
+            Ok(memo)
+        };
+
+        let reducer = |mut memo: Memo, item: Memo| {
+            memo.extend(item);
+            Ok(memo)
+        };
+
+        let dirs: Vec<&Path> = dirs.iter().map(|it| it.as_ref()).collect();
+
+        let mut entries: Memo = dirs
+            .into_par_iter()
+            .flat_map(Entry::walk)
+            .try_fold(Vec::new, folder)
+            .try_reduce(Vec::new, reducer)?;
+
+        entries.sort_by_key(|it| it.as_ref().to_path_buf());
+
+        Ok(entries)
     }
 
     pub fn try_from_path<T>(path: T) -> Result<Self, Error>
@@ -248,14 +293,14 @@ mod tests {
 
         assert_eq!(path.as_os_str(), IS_DIR_PATH);
     }
-    
+
     #[test]
     fn check_file_size() {
         let path = Path::new(A_FILE_PATH);
         let meta = path.metadata().unwrap();
         let attr = Attributes::from(meta);
         let err = Entry::file(&path, attr, "", (::std::u32::MAX as u64) + 1).unwrap_err();
-        
+
         assert!(err.to_string().contains("out of range"));
     }
 
@@ -263,8 +308,10 @@ mod tests {
     fn walk_directory() {
         use super::EntryKind::*;
 
-        let mut actual = Entry::walk(FIXTURES_PATH)
-            .map(|it| it.unwrap())
+        let dirs = vec![FIXTURES_PATH];
+        let mut actual = Entry::walk_into_vec(&dirs)
+            .unwrap()
+            .iter()
             .map(|it| {
                 let kind = it.kind();
                 let md5 = it.as_md5().map(String::from).unwrap_or_default();

@@ -1,50 +1,45 @@
-const BYTE_UNITS: &[&'static str] = &[
-    "b",
-    "kb",
-    "mb",
-    "gb",
-    "tb",
-    "pb",
-    "eb",
-    "zb",
-    "yb"
-];
+const BYTE_UNITS: &[&'static str] = &["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
 
 pub fn bytes(num: usize) -> String {
-    if num == 0 {
-        return format!("{}{}", num, BYTE_UNITS[0])
+    let unit = 1024_usize;
+    if num < unit {
+        return format!("{}{}", num, BYTE_UNITS[0]);
     }
-    
-    let num = num as f64;
-    let exp: f64 = num.log10() / 3_f64;
-    let exp: f64 = exp.floor();
-    let exp: f64 = exp.min((BYTE_UNITS.len() as f64) - 1_f64);
-    let num = num / 1_000f64.powf(exp);
-    let unit = BYTE_UNITS[exp as usize];
 
-    format!("{:.2}{}", num, unit)
+    let num = num as f64;
+    let unit = unit as f64;
+    let exp = (num.ln() / unit.ln()).floor();
+    let idx = BYTE_UNITS[(exp as usize)];
+    let num = num / unit.powf(exp);
+    format!("{:.2}{}", num, idx)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn pretty_bytes() {
-        let params: Vec<(u64, &str)> = vec! {
-            (0,  "0b"),
-            (1,  "1.00b"),
-            (10, "10.00b"),
-            (999, "999.00b"),
-            (1001, "1.00kb"),
-            (10_u64.pow(3) + 12456, "13.46kb"),
-            (10_u64.pow(16), "10.00pb"),
-        };
-        
+        let params: Vec<(u64, &str)> = vec![
+            (0, "0b"),
+            (1, "1b"),
+            (10, "10b"),
+            (999, "999b"),
+            (1001, "1001b"),
+            (1678, "1.64kb"),
+            (14368916, "13.70mb"),
+            (1186806872, "1.11gb"),
+            (10_u64.pow(7) + 12456, "9.55mb"),
+            (10_u64.pow(16), "8.88pb"),
+        ];
+
         for (num, expected) in params {
             let actual = bytes(num as usize);
-            println!("'{}' '{}'", num, expected);
-            assert_eq!(expected, actual);
+            assert_eq!(
+                expected, actual,
+                "expected {} should be {}, got {}",
+                num, expected, actual
+            );
         }
     }
 }
