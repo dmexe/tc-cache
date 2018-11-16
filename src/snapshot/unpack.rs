@@ -1,12 +1,12 @@
 use std::fs::{self, OpenOptions};
 use std::io::Read;
-use std::os::unix::fs::{self as unix_fs, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{self as unix_fs, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use filetime::{self, FileTime};
 
 use crate::errors::ResultExt;
-use crate::snapshot::{Attributes, Entry, Reading, O_DIRECT};
+use crate::snapshot::{Attributes, Entry, Reading};
 use crate::Error;
 
 pub trait Unpack {
@@ -71,10 +71,10 @@ where
     R: Read,
 {
     let mut file = OpenOptions::new()
+        .read(true)
         .write(true)
         .truncate(true)
         .create(true)
-        .custom_flags(O_DIRECT)
         .open(&dst)
         .io_err(&dst)?;
 

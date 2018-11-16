@@ -10,6 +10,8 @@ const PUSH_COMMAND: &str = "push";
 const PREFIX_ARG: &str = "prefix";
 const HOME_ARG: &str = "home";
 const DIRECTORY_ARG: &str = "directory";
+const SNAPSHOT_URL_ARG: &str = "snapshot-url";
+const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
 
 fn run(app: ArgMatches) -> Result<(), Error> {
     env_logger::init();
@@ -47,6 +49,7 @@ fn main() {
         .about("Pull a snapshot from a remote location")
         .arg(
             Arg::with_name(PREFIX_ARG)
+                .long("prefix")
                 .short("p")
                 .value_name("directory")
                 .help("Extract snapshot into specific directory (default '/')"),
@@ -69,9 +72,26 @@ fn main() {
         .setting(AppSettings::StrictUtf8)
         .arg(
             Arg::with_name(HOME_ARG)
-                .short("-H")
+                .long("home")
+                .short("d")
                 .value_name("directory")
                 .help("Set working directory (default '~/.tc-cache')"),
+        )
+        .arg(
+            Arg::with_name(SNAPSHOT_URL_ARG)
+                .long("url")
+                .short("u")
+                .value_name("url")
+                .env("TC_CACHE_SNAPSHOT_URL")
+                .help("[advanced] override caching url"),
+        )
+        .arg(
+            Arg::with_name(TEAMCITY_PROPS_FILE_ARG)
+                .long("build-props")
+                .short("f")
+                .value_name("file")
+                .env("TEAMCITY_BUILD_PROPERTIES_FILE")
+                .help("[advanced] override teamcity's build properties file"),
         )
         .subcommand(pull)
         .subcommand(push)

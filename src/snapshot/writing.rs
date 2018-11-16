@@ -1,11 +1,10 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use crate::bytes::IntoLeBytes;
 use crate::errors::ResultExt;
-use crate::snapshot::{Entry, MEM_MAP_THRESHOLD, O_DIRECT, VERSION};
+use crate::snapshot::{Entry, MEM_MAP_THRESHOLD, VERSION};
 use crate::{Error, Stats};
 
 #[derive(Debug)]
@@ -26,7 +25,6 @@ impl Writing {
             .create(true)
             .truncate(true)
             .write(true)
-            .custom_flags(O_DIRECT)
             .open(&path)
             .io_err(&path)?;
 
@@ -123,7 +121,7 @@ mod tests {
         assert_eq!(file_entry.as_file().is_some(), true);
 
         let written = snapshot.write_entry(&file_entry).unwrap();
-        assert_eq!(written, 119);
+        assert_eq!(written, 129);
 
         let (path, _, _, len) = file_entry.as_file().unwrap();
         let mut file = File::open(&path).io_err(&path).unwrap();

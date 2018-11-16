@@ -324,12 +324,12 @@ mod tests {
 
         #[rustfmt::skip]
         let expected = vec! {
-            (Dir,     "".into(),                                 "tests/fixtures".into()),
-            (File,    "0cc175b9c0f1b6a831c399e269772661".into(), "tests/fixtures/a.txt".into()),
-            (File,    "54510be579370aa078fbb9c5d9eed53a".into(), "tests/fixtures/b.txt".into()),
-            (Dir,     "".into(),                                 "tests/fixtures/is_dir".into()),
-            (File,    "d41d8cd98f00b204e9800998ecf8427e".into(), "tests/fixtures/is_dir/.keep".into()),
-            (Symlink, "".into(),                                 "tests/fixtures/is_symlink".into())
+            (Dir,     "".into(),                                 "tests/fixtures/snapshot".into()),
+            (File,    "0cc175b9c0f1b6a831c399e269772661".into(), "tests/fixtures/snapshot/a.txt".into()),
+            (File,    "54510be579370aa078fbb9c5d9eed53a".into(), "tests/fixtures/snapshot/b.txt".into()),
+            (Dir,     "".into(),                                 "tests/fixtures/snapshot/is_dir".into()),
+            (File,    "d41d8cd98f00b204e9800998ecf8427e".into(), "tests/fixtures/snapshot/is_dir/.keep".into()),
+            (Symlink, "".into(),                                 "tests/fixtures/snapshot/is_symlink".into())
         };
 
         assert_eq!(actual, expected)

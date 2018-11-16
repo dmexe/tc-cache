@@ -2,11 +2,12 @@ use std::path::Path;
 
 use tempfile::{self, NamedTempFile, TempDir};
 
-pub const A_FILE_PATH: &str = "tests/fixtures/a.txt";
-pub const B_FILE_PATH: &str = "tests/fixtures/b.txt";
-pub const IS_SYMLINK_PATH: &str = "tests/fixtures/is_symlink";
-pub const IS_DIR_PATH: &str = "tests/fixtures/is_dir";
-pub const FIXTURES_PATH: &str = "tests/fixtures";
+pub const FIXTURES_PATH: &str = "tests/fixtures/snapshot";
+pub const A_FILE_PATH: &str = "tests/fixtures/snapshot/a.txt";
+pub const B_FILE_PATH: &str = "tests/fixtures/snapshot/b.txt";
+pub const IS_SYMLINK_PATH: &str = "tests/fixtures/snapshot/is_symlink";
+pub const IS_DIR_PATH: &str = "tests/fixtures/snapshot/is_dir";
+pub const TEAMCITY_BUILD_PROPS_PATH: &str = "tests/fixtures/teamcity/build.properties";
 
 #[derive(Debug)]
 pub struct FileGuard(Option<NamedTempFile>);

@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+  rust_nightly_musl:
+    image: "rustlang/rust:nightly"
+    command: |
+      bash -ex -c '
+      apt-get update -qy                             &&
+      apt-get install musl-tools -qq                 &&
+      rustup target add x86_64-unknown-linux-musl    &&
+      cargo fetch                                    &&
+      cargo build $${CARGO_ARGS} --tests             &&
+      cargo test $${CARGO_ARGS} -- --nocapture       &&
+      cargo build $${CARGO_ARGS} --bin main --release'
+    volumes:
+      - "./:/app"
+    environment:
+      CARGO_ARGS: "--color always --target=x86_64-unknown-linux-musl"
+    working_dir: "/app"

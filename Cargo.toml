@@ -32,4 +32,4 @@ filetime = "0.2"
 tempfile = "3.0"
 
 [profile.release]
-debug = true
+# debug = true
