@@ -7,8 +7,8 @@ use memmap::{Mmap, MmapOptions};
 
 use crate::bytes::FromLeBytes;
 use crate::errors::ResultExt;
-use crate::snapshot::{BUFFER_SIZE, VERSION, VERSION_LEN};
-use crate::{Entry, Error};
+use crate::snapshot::{BUFFER_SIZE, VERSION, VERSION_LEN, Entry};
+use crate::Error;
 
 #[derive(Debug)]
 pub struct Reading<R = ()> {
@@ -120,9 +120,8 @@ mod tests {
 
     use crate::errors::ResultExt;
     use crate::hasher;
-    use crate::snapshot::Writing;
+    use crate::snapshot::{Entry, Writing};
     use crate::testing::{self, B_FILE_PATH};
-    use crate::Entry;
 
     #[test]
     fn read_file_entry() {

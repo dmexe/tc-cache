@@ -5,8 +5,7 @@ use std::path::Path;
 
 use crate::bytes::IntoLeBytes;
 use crate::errors::ResultExt;
-use crate::snapshot::{MEM_MAP_THRESHOLD, O_DIRECT, VERSION};
-use crate::Entry;
+use crate::snapshot::{MEM_MAP_THRESHOLD, O_DIRECT, VERSION, Entry};
 use crate::Error;
 
 #[derive(Debug)]
@@ -108,7 +107,7 @@ mod tests {
 
     use crate::errors::ResultExt;
     use crate::testing::{self, B_FILE_PATH};
-    use crate::Entry;
+    use crate::snapshot::Entry;
 
     #[test]
     fn write_file_entry() {

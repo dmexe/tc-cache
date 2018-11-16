@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 
 use filetime::{self, FileTime};
 
-use crate::entries::Attr;
 use crate::errors::ResultExt;
-use crate::snapshot::{Reading, O_DIRECT};
-use crate::{Entry, Error};
+use crate::snapshot::{Reading, O_DIRECT, Entry, Attributes};
+use crate::Error;
 
 pub trait Unpack {
     fn unpack<P>(self, prefix: Option<PathBuf>, dirs: &[P]) -> Result<(Vec<Entry>, usize), Error>
@@ -86,7 +85,7 @@ where
     snapshot.copy_to(&mut file, len)
 }
 
-fn restore_attributes<P>(path: P, attr: &Attr) -> Result<(), Error>
+fn restore_attributes<P>(path: P, attr: &Attributes) -> Result<(), Error>
 where
     P: AsRef<Path>,
 {

@@ -3,8 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::errors::ResultExt;
-use crate::snapshot::Writing;
-use crate::{Entry, Error};
+use crate::snapshot::{Entry, Writing};
+use crate::Error;
 
 pub trait Pack {
     fn pack<P>(self, dirs: &[P]) -> Result<usize, Error>
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn read_entries() {
-        use crate::entries::EntryKind::*;
+        use crate::snapshot::EntryKind::*;
 
         let src = vec![Path::new(FIXTURES_PATH), Path::new(IS_DIR_PATH)];
         let entries = super::read_entries(&src).unwrap();

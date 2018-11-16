@@ -4,7 +4,6 @@
 mod bytes;
 mod commands;
 mod config;
-mod entries;
 mod errors;
 mod hasher;
 mod snapshot;
@@ -13,7 +12,6 @@ mod snapshot;
 mod testing;
 
 pub use self::config::Config;
-pub use self::entries::{Entry, EntryKind};
 pub use self::errors::{Error, ErrorKind};
 
 #[cfg(test)]

@@ -15,21 +15,21 @@ use crate::hasher;
 use crate::Error;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Attr {
+pub struct Attributes {
     pub mode: u32,
     pub atime: i64,
     pub mtime: i64,
 }
 
-impl Attr {
+impl Attributes {
     pub fn new(mode: u32, atime: i64, mtime: i64) -> Self {
-        Attr { mode, atime, mtime }
+        Attributes { mode, atime, mtime }
     }
 }
 
-impl<T: UnixMetadata> From<T> for Attr {
+impl<T: UnixMetadata> From<T> for Attributes {
     fn from(metadata: T) -> Self {
-        Attr::new(metadata.mode(), metadata.atime(), metadata.mtime())
+        Attributes::new(metadata.mode(), metadata.atime(), metadata.mtime())
     }
 }
 
@@ -46,7 +46,7 @@ pub enum Entry {
     #[serde(rename = "f")]
     File {
         path: PathBuf,
-        attr: Attr,
+        attr: Attributes,
         md5: String,
         size: u64,
     },
@@ -54,17 +54,17 @@ pub enum Entry {
     Symlink {
         path: PathBuf,
         target: PathBuf,
-        attr: Attr,
+        attr: Attributes,
     },
     #[serde(rename = "d")]
-    Dir { path: PathBuf, attr: Attr },
+    Dir { path: PathBuf, attr: Attributes },
 }
 
 impl Entry {
     pub fn file<P, A, M>(path: P, attr: A, md5: M, size: u64) -> Self
     where
         P: AsRef<Path>,
-        A: Into<Attr>,
+        A: Into<Attributes>,
         M: Into<String>,
     {
         Entry::File {
@@ -79,7 +79,7 @@ impl Entry {
     where
         P: AsRef<Path>,
         T: AsRef<Path>,
-        A: Into<Attr>,
+        A: Into<Attributes>,
     {
         Entry::Symlink {
             path: path.as_ref().to_path_buf(),
@@ -91,7 +91,7 @@ impl Entry {
     pub fn dir<P, A>(path: P, attr: A) -> Self
     where
         P: AsRef<Path>,
-        A: Into<Attr>,
+        A: Into<Attributes>,
     {
         Entry::Dir {
             path: path.as_ref().to_path_buf(),
@@ -154,7 +154,7 @@ impl Entry {
         Err(Error::io(path)(err))
     }
 
-    pub fn as_file(&self) -> Option<(&Path, &Attr, &str, u64)> {
+    pub fn as_file(&self) -> Option<(&Path, &Attributes, &str, u64)> {
         match self {
             Entry::File {
                 ref path,
@@ -166,7 +166,7 @@ impl Entry {
         }
     }
 
-    pub fn as_symlink(&self) -> Option<(&Path, &Path, &Attr)> {
+    pub fn as_symlink(&self) -> Option<(&Path, &Path, &Attributes)> {
         match self {
             Entry::Symlink {
                 ref path,
@@ -177,7 +177,7 @@ impl Entry {
         }
     }
 
-    pub fn as_dir(&self) -> Option<(&Path, &Attr)> {
+    pub fn as_dir(&self) -> Option<(&Path, &Attributes)> {
         match self {
             Entry::Dir { ref path, ref attr } => Some((path.as_path(), attr)),
             _ => None,
