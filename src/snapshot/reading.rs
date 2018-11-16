@@ -16,7 +16,7 @@ pub struct Reading<R = ()> {
 }
 
 impl Reading {
-    pub fn new<R: Read>(reader: R) -> Result<Reading<snap::Reader<R>>, Error> {
+    pub fn from<R: Read>(reader: R) -> Result<Reading<snap::Reader<R>>, Error> {
         let mut reader = Reading {
             reader: snap::Reader::new(reader),
         };
@@ -32,7 +32,7 @@ impl Reading {
         let mapped = unsafe { opts.map(&file) };
         let mapped = mapped.io_err(&path)?;
 
-        Reading::new(Cursor::new(mapped))
+        Reading::from(Cursor::new(mapped))
     }
 }
 
@@ -119,7 +119,7 @@ mod tests {
     use std::path::Path;
 
     use crate::errors::ResultExt;
-    use crate::hasher;
+    use crate::hashing;
     use crate::snapshot::{Entry, Writing};
     use crate::testing::{self, B_FILE_PATH};
 
@@ -152,7 +152,7 @@ mod tests {
             let mut buf = Vec::new();
             snapshot.copy_to(&mut buf, len).unwrap();
 
-            let actual = hasher::md5_bytes(&buf);
+            let actual = hashing::md5::bytes(&buf);
             assert_eq!(md5, actual);
 
             assert_eq!(snapshot.read_entry().unwrap().is_none(), true);

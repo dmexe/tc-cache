@@ -13,7 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::errors::ResultExt;
-use crate::hasher;
+use crate::hashing;
 use crate::Error;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -152,7 +152,7 @@ impl Entry {
         if file_type.is_file() {
             let file = File::open(path).io_err(&path)?;
             let len = meta.len() as usize;
-            let md5 = hasher::md5_with_len(file, len as usize).io_err(&path)?;
+            let md5 = hashing::md5::file(file, len as usize).io_err(&path)?;
             return Entry::file(path, meta, md5, len);
         }
 
@@ -247,6 +247,16 @@ mod tests {
         let (path, _) = file.as_dir().unwrap();
 
         assert_eq!(path.as_os_str(), IS_DIR_PATH);
+    }
+    
+    #[test]
+    fn check_file_size() {
+        let path = Path::new(A_FILE_PATH);
+        let meta = path.metadata().unwrap();
+        let attr = Attributes::from(meta);
+        let err = Entry::file(&path, attr, "", (::std::u32::MAX as u64) + 1).unwrap_err();
+        
+        assert!(err.to_string().contains("out of range"));
     }
 
     #[test]

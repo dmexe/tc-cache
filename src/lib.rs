@@ -6,7 +6,7 @@ mod bytes;
 mod commands;
 mod config;
 mod errors;
-mod hasher;
+mod hashing;
 mod snapshot;
 
 #[cfg(test)]

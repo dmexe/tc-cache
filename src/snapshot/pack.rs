@@ -111,6 +111,6 @@ mod tests {
         let snapshot = Writing::open(&dst).unwrap();
         let written = snapshot.pack(&src).unwrap();
 
-        assert_eq!(written, 83732);
+        assert_eq!(written, 83728);
     }
 }

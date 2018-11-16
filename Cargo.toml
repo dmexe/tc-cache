@@ -15,7 +15,7 @@ serde_derive = "1.0"
 serde_json = "1.0"
 serde_cbor = "0.9"
 
-md5 = { package = "md-5", version = "0.8", features = ["std", "asm"] }
+digest_md5 = { package = "md-5", version = "0.8", features = ["std", "asm"] }
 hex = "0.3"
 
 memmap = "0.7"

@@ -1,28 +1,33 @@
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
 
-use md5::Digest;
+use digest_md5::{Digest, Md5};
 
 const MEM_MAP_THRESHOLD: usize = 64 * 1024; // 64k
 
-pub fn md5(file: File) -> Result<String, IoError> {
-    let len = file.metadata()?.len();
-    md5_with_len(file, len as usize)
-}
+pub mod md5 {
+    use super::*;
+    
+    pub fn file(mut file: File, len: usize) -> Result<String, IoError> {
+        let hasher = Md5::new();
 
-pub fn md5_with_len(mut file: File, len: usize) -> Result<String, IoError> {
-    let hasher = md5::Md5::new();
+        if len < MEM_MAP_THRESHOLD {
+            hash_file(&mut file, hasher, len)
+        } else {
+            hash_mapped_file(&file, hasher, len)
+        }
+    }
 
-    if len < MEM_MAP_THRESHOLD {
-        hash_file(&mut file, hasher, len)
-    } else {
-        hash_mapped_file(&file, hasher, len)
+    #[inline]
+    pub fn bytes(src: &[u8]) -> String {
+        let hasher = md5::Md5::new();
+        hash_bytes(src, hasher)
     }
 }
 
-pub fn md5_bytes(src: &[u8]) -> String {
-    let mut hasher = md5::Md5::new();
-    hasher.input(src);
+#[inline]
+fn hash_bytes<D: Digest>(buf: &[u8], mut hasher: D) -> String {
+    hasher.input(buf);
     let result = hasher.result();
     hex::encode(&result)
 }
@@ -59,17 +64,22 @@ fn hash_mapped_file<D: Digest>(file: &File, mut hasher: D, len: usize) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    use std::path::Path;
+    
     use crate::testing::{A_FILE_PATH, B_FILE_PATH};
 
     #[test]
     fn md5_for_regular_file() {
-        let hash = File::open(A_FILE_PATH).and_then(md5).unwrap();
+        let len = Path::new(A_FILE_PATH).metadata().unwrap().len() as usize;
+        let hash = File::open(A_FILE_PATH).and_then(|f| md5::file(f, len) ).unwrap();
         assert_eq!(hash, "0cc175b9c0f1b6a831c399e269772661")
     }
 
     #[test]
     fn md5_for_mapped_file() {
-        let hash = File::open(B_FILE_PATH).and_then(md5).unwrap();
+        let len = Path::new(B_FILE_PATH).metadata().unwrap().len() as usize;
+        let hash = File::open(B_FILE_PATH).and_then(|f| md5::file(f, len) ).unwrap();
         assert_eq!(hash, "54510be579370aa078fbb9c5d9eed53a")
     }
 }

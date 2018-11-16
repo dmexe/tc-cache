@@ -28,11 +28,7 @@ impl<R: Read> Unpack for Reading<R> {
         let mut read: usize = 0;
         let mut entries = Vec::new();
 
-        loop {
-            let (entry, len) = match self.read_entry()? {
-                Some(entry) => entry,
-                None => break,
-            };
+        while let Some((entry, len)) = self.read_entry()? {
             read += len;
 
             if !is_include(dirs, entry.as_ref()) {

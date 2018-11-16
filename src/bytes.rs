@@ -25,10 +25,10 @@ impl FromLeBytes<u32> for u32 {
     type Bytes = [u8; 4];
 
     fn from_le_bytes(buf: Self::Bytes) -> u32 {
-        ((buf[0] as u32) << 0)
-            + ((buf[1] as u32) << 8)
-            + ((buf[2] as u32) << 16)
-            + ((buf[3] as u32) << 24)
+        (u32::from(buf[0]))
+            + (u32::from(buf[1]) << 8)
+            + (u32::from(buf[2]) << 16)
+            + (u32::from(buf[3]) << 24)
     }
 }
 

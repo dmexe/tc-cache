@@ -14,7 +14,7 @@ pub struct Writing<W = ()> {
 }
 
 impl Writing {
-    pub fn new<W: Write>(writer: W) -> Result<Writing<snap::Writer<W>>, Error> {
+    pub fn from<W: Write>(writer: W) -> Result<Writing<snap::Writer<W>>, Error> {
         let writer = snap::Writer::new(writer);
         let mut writer = Writing { writer };
 
@@ -30,7 +30,7 @@ impl Writing {
             .open(&path)
             .io_err(&path)?;
 
-        Writing::new(file)
+        Writing::from(file)
     }
 }
 
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(file_entry.as_file().is_some(), true);
 
         let written = snapshot.write_entry(&file_entry).unwrap();
-        assert_eq!(written, 120);
+        assert_eq!(written, 119);
 
         let (path, _, _, len) = file_entry.as_file().unwrap();
         let mut file = File::open(&path).io_err(&path).unwrap();
