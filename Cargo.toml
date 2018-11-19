@@ -29,11 +29,13 @@ snap = "0.2"
 filetime = "0.2"
 
 url = "1.7"
-rusoto_core = "0.35"
-rusoto_s3 = "0.35"
+rusoto_core = { version = "0.35.0", default_features = false, features = ["rustls"] }
+rusoto_s3 = { version = "0.35.0", default_features = false, features = ["rustls"] }
 
 [dev-dependencies]
 tempfile = "3.0"
 
 [profile.release]
+lto = true
+panic = "abort"
 # debug = true
