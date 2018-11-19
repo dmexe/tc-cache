@@ -199,7 +199,7 @@ mod tests {
         };
 
         assert_eq!(
-            env.name(),
+            env.to_string(),
             "2018.1.3 (build 58658) at http://localhost:8111"
         );
         assert_eq!(env.project_id(), "Github_Example_Example");

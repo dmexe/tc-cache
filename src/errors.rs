@@ -9,6 +9,7 @@ pub enum ErrorKind {
     Io(PathBuf),
     Snapshot(String),
     NoSuchEnvironment,
+    UnrecognizedSnapshotUrl(String),
 }
 
 #[derive(Debug)]
@@ -18,6 +19,16 @@ pub struct Error {
 }
 
 impl Error {
+    pub fn unrecognized_snapshot_url<S>(message: S) -> Error
+    where
+        S: Into<String>,
+    {
+        Error {
+            kind: ErrorKind::UnrecognizedSnapshotUrl(message.into()),
+            cause: None,
+        }
+    }
+
     pub fn no_such_environment() -> Error {
         Error {
             kind: ErrorKind::NoSuchEnvironment,
@@ -77,6 +88,9 @@ impl Display for Error {
             ErrorKind::Io(path) => write!(f, "File {:?} error", path.as_os_str())?,
             ErrorKind::Snapshot(message) => write!(f, "Snapshot error; {}", message)?,
             ErrorKind::NoSuchEnvironment => write!(f, "{}", self.description())?,
+            ErrorKind::UnrecognizedSnapshotUrl(message) => {
+                write!(f, "Unrecognized snapshot url; {}", message)?
+            }
         };
 
         let mut cause = self.source();
@@ -95,6 +109,7 @@ impl StdError for Error {
             ErrorKind::Io(_) => "I/O error",
             ErrorKind::Snapshot(_) => "Snapshot error",
             ErrorKind::NoSuchEnvironment => "Unable to detect a runtime environment",
+            ErrorKind::UnrecognizedSnapshotUrl(_) => "Unrecognized snapshot url",
         }
     }
 

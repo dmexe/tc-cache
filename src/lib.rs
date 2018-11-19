@@ -11,6 +11,7 @@ mod environments;
 mod errors;
 mod hashing;
 pub mod pretty;
+mod remote;
 mod snapshot;
 mod stats;
 
