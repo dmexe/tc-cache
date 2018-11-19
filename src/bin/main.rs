@@ -28,7 +28,7 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
 
     let environment = match env.or_else(|| TeamCityEnv::from_env().map(TeamCityEnv::into_box)) {
         Some(env) => env,
-        None => return Err(Error::no_such_environment()),
+        None => return Err(Error::unrecognized_environment("Unknown")),
     };
 
     info!("{}", environment);

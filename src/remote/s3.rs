@@ -1,8 +1,11 @@
 use std::fmt::{self, Display};
+use std::str::FromStr;
 use std::string::ToString;
 
-use crate::Error;
+use rusoto_core::Region;
 use url::{Host, Url};
+
+use crate::Error;
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
@@ -10,8 +13,8 @@ const REGION_QUERY_KEY: &str = "region";
 #[derive(Debug)]
 pub struct S3 {
     bucket_name: String,
-    prefix: Option<String>,
-    default_region: Option<String>,
+    key_prefix: Option<String>,
+    region: Region,
 }
 
 impl S3 {
@@ -36,15 +39,15 @@ impl S3 {
             }
         };
 
-        let mut prefix = uri.path().to_string();
-        if prefix.starts_with('/') {
-            prefix = prefix.drain(1..).collect()
+        let mut key_prefix = uri.path().to_string();
+        if key_prefix.starts_with('/') {
+            key_prefix = key_prefix.drain(1..).collect()
         };
 
-        let prefix = if prefix.is_empty() {
+        let key_prefix = if key_prefix.is_empty() {
             None
         } else {
-            Some(prefix.to_string())
+            Some(key_prefix.to_string())
         };
 
         let mut query = uri.query_pairs();
@@ -52,10 +55,15 @@ impl S3 {
             .find(|it| it.0.as_ref() == REGION_QUERY_KEY)
             .map(|it| it.1.to_string());
 
+        let region = match default_region {
+            Some(name) => Region::from_str(name.as_str()).unwrap_or_else(|_| Region::default()),
+            None => Region::default(),
+        };
+
         let s3 = S3 {
             bucket_name,
-            prefix,
-            default_region,
+            key_prefix,
+            region,
         };
 
         Ok(s3)
@@ -67,15 +75,11 @@ impl Display for S3 {
         write!(f, "{}://", S3_URI_SCHEME)?;
         write!(f, "{}", self.bucket_name)?;
 
-        if let Some(ref prefix) = self.prefix {
+        if let Some(ref prefix) = self.key_prefix {
             write!(f, "/{}", prefix)?;
         }
 
-        if let Some(ref region) = self.default_region {
-            write!(f, "?{}={}", REGION_QUERY_KEY, region)?;
-        }
-
-        Ok(())
+        write!(f, "?{}={}", REGION_QUERY_KEY, self.region.name())
     }
 }
 
@@ -84,28 +88,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse() {
-        let ok_params = vec![
+    fn parse_ok() {
+        #[rustfmt::skip]
+        let params = vec![
             (
-                "s3://bucket-name/prefix?region=eu-west",
-                "s3://bucket-name/prefix?region=eu-west",
+                "s3://bucket-name/prefix?region=eu-west-1",
+                "s3://bucket-name/prefix?region=eu-west-1",
             ),
             (
-                "s3://bucket-name?region=eu-west",
-                "s3://bucket-name?region=eu-west",
+                "s3://bucket-name?region=eu-west-1",
+                "s3://bucket-name?region=eu-west-1",
             ),
-            ("s3://bucket-name/prefix", "s3://bucket-name/prefix"),
-            ("s3://bucket-name", "s3://bucket-name"),
+            (
+                "s3://bucket-name/prefix",
+                "s3://bucket-name/prefix?region="
+            ),
+            (
+                "s3://bucket-name", 
+                "s3://bucket-name?region="
+            ),
         ];
 
-        let err_params = vec!["http://example.com"];
-
-        for (uri, expected) in ok_params {
+        for (uri, expected) in params {
             let actual = S3::parse(uri).unwrap();
-            assert_eq!(actual.to_string(), expected.to_string());
+            assert!(
+                actual.to_string().starts_with(expected),
+                format!("Expect that '{}' starts with '{}'", actual, expected)
+            );
         }
+    }
 
-        for uri in err_params {
+    #[test]
+    fn parse_err() {
+        #[rustfmt::skip]
+        let params = vec! { 
+            "http://example.com" 
+        };
+
+        for uri in params {
             match S3::parse(uri) {
                 Err(_) => {}
                 Ok(ok) => unreachable!("{:?}", ok),

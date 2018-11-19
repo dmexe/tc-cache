@@ -8,8 +8,8 @@ type Cause = Box<dyn StdError + Send + Sync + 'static>;
 pub enum ErrorKind {
     Io(PathBuf),
     Snapshot(String),
-    NoSuchEnvironment,
-    UnrecognizedSnapshotUrl(String),
+    UnrecognizedEnvironment,
+    UnrecognizedSnapshotUrl,
 }
 
 #[derive(Debug)]
@@ -19,20 +19,23 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn unrecognized_snapshot_url<S>(message: S) -> Error
+    pub fn unrecognized_snapshot_url<E>(err: E) -> Error
     where
-        S: Into<String>,
+        E: Into<Cause>,
     {
         Error {
-            kind: ErrorKind::UnrecognizedSnapshotUrl(message.into()),
-            cause: None,
+            kind: ErrorKind::UnrecognizedSnapshotUrl,
+            cause: Some(err.into()),
         }
     }
 
-    pub fn no_such_environment() -> Error {
+    pub fn unrecognized_environment<E>(err: E) -> Error
+    where
+        E: Into<Cause>,
+    {
         Error {
-            kind: ErrorKind::NoSuchEnvironment,
-            cause: None,
+            kind: ErrorKind::UnrecognizedEnvironment,
+            cause: Some(err.into()),
         }
     }
 
@@ -85,12 +88,10 @@ impl Error {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match &self.kind {
-            ErrorKind::Io(path) => write!(f, "File {:?} error", path.as_os_str())?,
-            ErrorKind::Snapshot(message) => write!(f, "Snapshot error; {}", message)?,
-            ErrorKind::NoSuchEnvironment => write!(f, "{}", self.description())?,
-            ErrorKind::UnrecognizedSnapshotUrl(message) => {
-                write!(f, "Unrecognized snapshot url; {}", message)?
-            }
+            ErrorKind::Io(path) => write!(f, "{} at {:?}", self.description(), path.as_os_str())?,
+            ErrorKind::Snapshot(message) => write!(f, "{}; {}", self.description(), message)?,
+            ErrorKind::UnrecognizedEnvironment => write!(f, "{}", self.description())?,
+            ErrorKind::UnrecognizedSnapshotUrl => write!(f, "{}", self.description())?,
         };
 
         let mut cause = self.source();
@@ -108,8 +109,8 @@ impl StdError for Error {
         match &self.kind {
             ErrorKind::Io(_) => "I/O error",
             ErrorKind::Snapshot(_) => "Snapshot error",
-            ErrorKind::NoSuchEnvironment => "Unable to detect a runtime environment",
-            ErrorKind::UnrecognizedSnapshotUrl(_) => "Unrecognized snapshot url",
+            ErrorKind::UnrecognizedEnvironment => "Unrecognized environment",
+            ErrorKind::UnrecognizedSnapshotUrl => "Unrecognized snapshot url",
         }
     }
 
