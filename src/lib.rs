@@ -19,6 +19,6 @@ mod testing;
 
 pub use self::commands::{Pull, Push};
 pub use self::config::Config;
-pub use self::environments::Environment;
+pub use self::environments::{Environment, TeamCityEnv};
 pub use self::errors::{Error, ErrorKind};
 pub use self::stats::Stats;

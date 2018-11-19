@@ -2,24 +2,36 @@ use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
-use log::info;
-use tc_cache::{pretty, Config, Error, Pull, Push, Stats};
+use log::{error, info};
+use tc_cache::{pretty, Config, Environment, Error, Pull, Push, Stats, TeamCityEnv};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
 const PREFIX_ARG: &str = "prefix";
 const HOME_ARG: &str = "home";
 const DIRECTORY_ARG: &str = "directory";
-const SNAPSHOT_URL_ARG: &str = "snapshot-url";
 const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
 
-fn run(app: ArgMatches) -> Result<(), Error> {
+fn run(app: &ArgMatches) -> Result<(), Error> {
     env_logger::init();
 
     let cfg = app
         .value_of(HOME_ARG)
         .map(Config::from)
         .unwrap_or_else(Config::from_env)?;
+
+    let mut env: Option<Box<dyn Environment>> = None;
+
+    if let Some(path) = app.value_of(TEAMCITY_PROPS_FILE_ARG) {
+        env = TeamCityEnv::from_path(path).map(TeamCityEnv::into_box)
+    }
+
+    let environment = match env.or_else(|| TeamCityEnv::from_env().map(TeamCityEnv::into_box)) {
+        Some(env) => env,
+        None => return Err(Error::no_such_environment()),
+    };
+
+    info!("{}", environment);
 
     if let Some(pull) = app.subcommand_matches(PULL_COMMAND) {
         let directories = pull.values_of(DIRECTORY_ARG).unwrap();
@@ -78,17 +90,9 @@ fn main() {
                 .help("Set working directory (default '~/.tc-cache')"),
         )
         .arg(
-            Arg::with_name(SNAPSHOT_URL_ARG)
-                .long("url")
-                .short("u")
-                .value_name("url")
-                .env("TC_CACHE_SNAPSHOT_URL")
-                .help("[advanced] override caching url"),
-        )
-        .arg(
             Arg::with_name(TEAMCITY_PROPS_FILE_ARG)
+                .hidden(true)
                 .long("build-props")
-                .short("f")
                 .value_name("file")
                 .env("TEAMCITY_BUILD_PROPERTIES_FILE")
                 .help("[advanced] override teamcity's build properties file"),
@@ -97,5 +101,7 @@ fn main() {
         .subcommand(push)
         .get_matches();
 
-    run(app).unwrap();
+    if let Err(err) = run(&app) {
+        error!("{}", err);
+    }
 }

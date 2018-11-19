@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::env;
+use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use log::warn;
+
 use crate::errors::ResultExt;
 use crate::Environment;
-use crate::Error;
 
 const TEAMCITY_VERSION_PROP: &str = "env.TEAMCITY_VERSION";
 const TEAMCITY_SERVER_URL_PROP: &str = "teamcity.serverUrl";
@@ -15,14 +17,14 @@ const BUILD_BRANCH_IS_DEFAULT_PROP: &str = "teamcity.build.branch.is_default";
 const CACHE_SNAPSHOT_URL_PROP: &str = "tc.cache.snapshot.url";
 const TEAMCITY_BUILD_PROPERTIES_FILE_ENV: &str = "TEAMCITY_BUILD_PROPERTIES_FILE";
 
-pub struct TeamCity {
+pub struct TeamCityEnv {
     name: String,
     project_id: String,
     is_default_branch: bool,
-    snapshot_url: Option<String>,
+    snapshot_url: String,
 }
 
-impl TeamCity {
+impl TeamCityEnv {
     pub fn from_env() -> Option<Self> {
         let props_path = match env::var(TEAMCITY_BUILD_PROPERTIES_FILE_ENV) {
             Ok(ok) => ok,
@@ -30,25 +32,23 @@ impl TeamCity {
         };
 
         let props_path = Path::new(props_path.as_str());
-        TeamCity::from_path(props_path)
+        TeamCityEnv::from_path(props_path)
     }
 
-    pub fn from_path<P>(teamcity_props_path: P) -> Option<Self>
+    pub fn from_path<P>(props_file_path: P) -> Option<Self>
     where
         P: AsRef<Path>,
     {
-        if !teamcity_props_path.as_ref().exists() {
+        if !props_file_path.as_ref().exists() {
             return None;
         }
 
-        let mut file = File::open(&teamcity_props_path)
-            .io_err(&teamcity_props_path)
-            .ok()?;
+        let mut file = File::open(&props_file_path).io_err(&props_file_path).ok()?;
         let mut content = String::new();
         file.read_to_string(&mut content)
-            .io_err(&teamcity_props_path)
+            .io_err(&props_file_path)
             .ok()?;
-        TeamCity::from_props(content.as_str())
+        TeamCityEnv::from_props(content.as_str())
     }
 
     pub fn from_props(props: &str) -> Option<Self> {
@@ -56,41 +56,43 @@ impl TeamCity {
         let version = props.key(TEAMCITY_VERSION_PROP)?;
         let server_url = props.key(TEAMCITY_SERVER_URL_PROP)?;
         let project_id = props.key(PROJECT_ID_PROP)?.to_string();
-        let snapshot_url = props.key(CACHE_SNAPSHOT_URL_PROP).map(str::to_string);
+        let snapshot_url = props.key(CACHE_SNAPSHOT_URL_PROP).map(str::to_string)?;
         let is_default_branch = props
             .key(BUILD_BRANCH_IS_DEFAULT_PROP)
             .map(|it| it == "true")
             .unwrap_or(false);
         let name = format!("{} at {}", version, server_url);
 
-        Some(TeamCity {
+        Some(TeamCityEnv {
             name,
             project_id,
             is_default_branch,
             snapshot_url,
         })
     }
+
+    pub fn into_box(self) -> Box<dyn Environment> {
+        Box::new(self)
+    }
 }
 
-impl Environment for TeamCity {
-    fn name(&self) -> &str {
-        self.name.as_str()
+impl Display for TeamCityEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "TeamCity {}", self.name)
     }
+}
 
+impl Environment for TeamCityEnv {
     fn project_id(&self) -> &str {
         self.project_id.as_str()
     }
 
-    fn is_default_branch(&self) -> bool {
+    fn is_uploadable(&self) -> bool {
         self.is_default_branch
     }
 
-    fn snapshot_url(&self) -> Option<&str> {
-        if let Some(ref url) = self.snapshot_url {
-            Some(url.as_str())
-        } else {
-            None
-        }
+    fn snapshot_url(&self) -> &str {
+        self.snapshot_url.as_str()
     }
 }
 
@@ -108,19 +110,26 @@ impl Props {
     }
 
     fn key(&self, key: &str) -> Option<&str> {
-        self.0
+        let value = self
+            .0
             .iter()
             .find(|it| it.0.as_str() == key)
-            .map(|it| it.1.as_str())
+            .map(|it| it.1.as_str());
+
+        if value.is_none() {
+            warn!("Cannot found key '{}' in build properties", key);
+        };
+
+        value
     }
 
     fn parse(line: &str) -> Option<(String, String)> {
         let line = line.trim();
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             return None;
         }
 
-        if let Some(idx) = line.find("=") {
+        if let Some(idx) = line.find('=') {
             let key = line[0..idx].trim().to_string();
             let value = line[(idx + 1)..].trim().to_string();
             let value = value.replace("\\:", ":");
@@ -186,7 +195,7 @@ mod tests {
             let mut content = String::new();
 
             file.read_to_string(&mut content).unwrap();
-            TeamCity::from_props(content.as_str()).unwrap()
+            TeamCityEnv::from_props(content.as_str()).unwrap()
         };
 
         assert_eq!(
@@ -194,7 +203,7 @@ mod tests {
             "2018.1.3 (build 58658) at http://localhost:8111"
         );
         assert_eq!(env.project_id(), "Github_Example_Example");
-        assert_eq!(env.is_default_branch(), true);
-        assert_eq!(env.snapshot_url(), None);
+        assert_eq!(env.is_uploadable(), true);
+        assert_eq!(env.snapshot_url(), "s3://bucket/prefix");
     }
 }

@@ -1,4 +1,4 @@
-const BYTE_UNITS: &[&'static str] = &["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
+const BYTE_UNITS: &[&str] = &["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
 
 pub fn bytes(num: usize) -> String {
     let unit = 1024_usize;

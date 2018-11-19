@@ -8,6 +8,7 @@ type Cause = Box<dyn StdError + Send + Sync + 'static>;
 pub enum ErrorKind {
     Io(PathBuf),
     Snapshot(String),
+    NoSuchEnvironment,
 }
 
 #[derive(Debug)]
@@ -17,6 +18,13 @@ pub struct Error {
 }
 
 impl Error {
+    pub fn no_such_environment() -> Error {
+        Error {
+            kind: ErrorKind::NoSuchEnvironment,
+            cause: None,
+        }
+    }
+
     pub fn io<T, E>(path: T) -> impl FnOnce(E) -> Error
     where
         T: AsRef<Path>,
@@ -68,6 +76,7 @@ impl Display for Error {
         match &self.kind {
             ErrorKind::Io(path) => write!(f, "File {:?} error", path.as_os_str())?,
             ErrorKind::Snapshot(message) => write!(f, "Snapshot error; {}", message)?,
+            ErrorKind::NoSuchEnvironment => write!(f, "{}", self.description())?,
         };
 
         let mut cause = self.source();
@@ -85,6 +94,7 @@ impl StdError for Error {
         match &self.kind {
             ErrorKind::Io(_) => "I/O error",
             ErrorKind::Snapshot(_) => "Snapshot error",
+            ErrorKind::NoSuchEnvironment => "Unable to detect a runtime environment",
         }
     }
 

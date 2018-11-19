@@ -1,10 +1,11 @@
-mod teamcity;
+use std::fmt::Display;
 
-use self::teamcity::TeamCity;
+mod teamcity_env;
 
-pub trait Environment {
-    fn name(&self) -> &str;
+pub use self::teamcity_env::TeamCityEnv;
+
+pub trait Environment: Display {
     fn project_id(&self) -> &str;
-    fn is_default_branch(&self) -> bool;
-    fn snapshot_url(&self) -> Option<&str>;
+    fn is_uploadable(&self) -> bool;
+    fn snapshot_url(&self) -> &str;
 }
