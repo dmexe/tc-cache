@@ -1,14 +1,30 @@
 use std::fmt::{self, Display};
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
 
+use futures::stream::{self as fstream, Stream};
+use futures::Future;
+use memmap::MmapOptions;
 use rusoto_core::Region;
+use rusoto_s3::{
+    CompleteMultipartUploadRequest, CompletedMultipartUpload, CompletedPart,
+    CreateMultipartUploadRequest, GetObjectRequest, UploadPartRequest,
+};
+use rusoto_s3::{S3Client, S3 as S3Api};
 use url::{Host, Url};
 
+use crate::errors::ResultExt;
+use crate::remote::{DownloadRequest, UploadRequest};
 use crate::Error;
+use crate::Remote;
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
+const CHUNK_SIZE: usize = 1024 * 1024 * 10; // 1mb
+const CONCURRENCY: usize = 10;
 
 #[derive(Debug)]
 pub struct S3 {
@@ -18,16 +34,12 @@ pub struct S3 {
 }
 
 impl S3 {
-    pub fn parse<S>(uri: S) -> Result<Self, Error>
-    where
-        S: ToString,
-    {
-        let uri = Url::parse(uri.to_string().as_str()).unwrap();
+    pub fn from(uri: &Url) -> Result<Self, Error> {
         match uri.scheme() {
             S3_URI_SCHEME => {}
             scheme @ _ => {
                 let err = format!("Unknown scheme '{}'", scheme);
-                return Err(Error::unrecognized_snapshot_url(err));
+                return Err(Error::remote(err));
             }
         };
 
@@ -35,7 +47,7 @@ impl S3 {
             Some(Host::Domain(host)) => host.to_string(),
             host @ _ => {
                 let err = format!("Unrecognized bucket '{:?}'", host);
-                return Err(Error::unrecognized_snapshot_url(err));
+                return Err(Error::remote(err));
             }
         };
 
@@ -68,6 +80,22 @@ impl S3 {
 
         Ok(s3)
     }
+
+    pub fn scheme() -> &'static str {
+        S3_URI_SCHEME
+    }
+
+    pub fn endpoint<S>(self, endpoint: S) -> Self
+    where
+        S: Into<String>,
+    {
+        let region = Region::Custom {
+            name: self.region.name().to_string(),
+            endpoint: endpoint.into(),
+        };
+
+        Self { region, ..self }
+    }
 }
 
 impl Display for S3 {
@@ -79,7 +107,108 @@ impl Display for S3 {
             write!(f, "/{}", prefix)?;
         }
 
-        write!(f, "?{}={}", REGION_QUERY_KEY, self.region.name())
+        write!(f, "?{}={:?}", REGION_QUERY_KEY, self.region)
+    }
+}
+
+impl Remote for S3 {
+    fn download(&self, req: DownloadRequest) -> Result<(), Error> {
+        let client = S3Client::new(self.region.clone());
+        let path = &req.path.as_path();
+
+        let get_object = GetObjectRequest {
+            bucket: self.bucket_name.clone(),
+            key: req.key,
+            ..Default::default()
+        };
+
+        let resp = client.get_object(get_object).sync().io_err(path)?;
+        let body = resp.body.ok_or_else(|| Error::remote("body must be"))?;
+
+        let mut opts = OpenOptions::new();
+        let mut file = opts
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(path)
+            .io_err(path)?;
+
+        body.map_err(Error::remote)
+            .and_then(|chunk| file.write_all(&chunk).io_err(path))
+            .collect()
+            .wait()?;
+
+        Ok(())
+    }
+
+    fn upload(&self, req: UploadRequest) -> Result<(), Error> {
+        let client = S3Client::new(self.region.clone());
+
+        let file = File::open(&req.path).io_err(&req.path)?;
+        let mut opts = MmapOptions::new();
+        opts.len(req.len);
+
+        let src = unsafe { opts.map(&file) };
+        let src = src.io_err(&req.path)?;
+
+        let upload = CreateMultipartUploadRequest {
+            bucket: self.bucket_name.clone(),
+            key: req.key.clone(),
+            ..Default::default()
+        };
+
+        let upload = client
+            .create_multipart_upload(upload)
+            .sync()
+            .map_err(Error::remote)?;
+        let upload_id = upload
+            .upload_id
+            .ok_or_else(|| Error::remote("upload_id cannot be empty"))?;
+
+        let parts = src
+            .chunks(CHUNK_SIZE)
+            .enumerate()
+            .map(|(part_number, chunk)| {
+                let part_number = (part_number + 1) as i64;
+                let body = Vec::from(chunk);
+                let part = UploadPartRequest {
+                    body: Some(body.into()),
+                    bucket: self.bucket_name.clone(),
+                    key: req.key.to_string(),
+                    upload_id: upload_id.clone(),
+                    part_number: part_number as i64,
+                    ..Default::default()
+                };
+                client.upload_part(part).map(move |res| CompletedPart {
+                    e_tag: res.e_tag.clone(),
+                    part_number: Some(part_number),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let parts = fstream::iter_ok(parts)
+            .buffered(CONCURRENCY)
+            .collect()
+            .wait()
+            .map_err(Error::remote)?;
+
+        let complete = CompleteMultipartUploadRequest {
+            bucket: self.bucket_name.clone(),
+            key: req.key.clone(),
+            upload_id,
+            multipart_upload: Some(CompletedMultipartUpload { parts: Some(parts) }),
+            ..Default::default()
+        };
+
+        client
+            .complete_multipart_upload(complete)
+            .sync()
+            .map_err(Error::remote)?;
+        Ok(())
+    }
+
+    fn into_box(self) -> Box<dyn Remote> {
+        Box::new(self)
     }
 }
 
@@ -87,8 +216,14 @@ impl Display for S3 {
 mod tests {
     use super::*;
 
+    use std::env;
+    use std::fs::File;
+
+    use crate::hashing;
+    use crate::testing::{temp_file, B_FILE_PATH};
+
     #[test]
-    fn parse_ok() {
+    fn from_url() {
         #[rustfmt::skip]
         let params = vec![
             (
@@ -110,7 +245,8 @@ mod tests {
         ];
 
         for (uri, expected) in params {
-            let actual = S3::parse(uri).unwrap();
+            let uri = Url::parse(uri).unwrap();
+            let actual = S3::from(&uri).unwrap();
             assert!(
                 actual.to_string().starts_with(expected),
                 format!("Expect that '{}' starts with '{}'", actual, expected)
@@ -126,10 +262,43 @@ mod tests {
         };
 
         for uri in params {
-            match S3::parse(uri) {
+            let uri = Url::parse(uri).unwrap();
+            match S3::from(&uri) {
                 Err(_) => {}
                 Ok(ok) => unreachable!("{:?}", ok),
             }
         }
+    }
+
+    #[test]
+    fn upload() {
+        env::set_var("AWS_ACCESS_KEY_ID", "accessKey");
+        env::set_var("AWS_SECRET_ACCESS_KEY", "secretKey");
+
+        let uri = Url::parse("s3://bucket/prefix").unwrap();
+        let s3 = S3::from(&uri).unwrap().endpoint("http://127.0.0.1:9000");
+        let len = { File::open(&B_FILE_PATH).unwrap().metadata().unwrap().len() as usize };
+        let dst = temp_file(".s3");
+
+        let upload = UploadRequest {
+            path: B_FILE_PATH.into(),
+            len,
+            key: "projectId".into(),
+            ..Default::default()
+        };
+
+        s3.upload(upload).unwrap();
+
+        let download = DownloadRequest {
+            path: dst.as_ref().to_path_buf(),
+            key: "projectId".into(),
+        };
+
+        s3.download(download).unwrap();
+
+        let expected = hashing::md5::path(&B_FILE_PATH).unwrap();
+        let actual = hashing::md5::path(&dst).unwrap();
+
+        assert_eq!(expected, actual);
     }
 }

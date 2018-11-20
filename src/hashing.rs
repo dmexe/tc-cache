@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
+use std::path::Path;
 
 use digest_md5::{Digest, Md5};
 
@@ -18,6 +19,15 @@ pub mod md5 {
         } else {
             hash_mapped_file(&file, hasher, len)
         }
+    }
+
+    pub fn path<P>(path: P) -> Result<String, IoError>
+    where
+        P: AsRef<Path>,
+    {
+        let file = File::open(path)?;
+        let len = file.metadata()?.len() as usize;
+        md5::file(file, len)
     }
 
     #[inline]

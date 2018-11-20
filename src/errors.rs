@@ -8,8 +8,8 @@ type Cause = Box<dyn StdError + Send + Sync + 'static>;
 pub enum ErrorKind {
     Io(PathBuf),
     Snapshot(String),
-    UnrecognizedEnvironment,
-    UnrecognizedSnapshotUrl,
+    UnrecognizedService,
+    Remote,
 }
 
 #[derive(Debug)]
@@ -19,22 +19,22 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn unrecognized_snapshot_url<E>(err: E) -> Error
+    pub fn remote<E>(err: E) -> Error
     where
         E: Into<Cause>,
     {
         Error {
-            kind: ErrorKind::UnrecognizedSnapshotUrl,
+            kind: ErrorKind::Remote,
             cause: Some(err.into()),
         }
     }
 
-    pub fn unrecognized_environment<E>(err: E) -> Error
+    pub fn unrecognized_service<E>(err: E) -> Error
     where
         E: Into<Cause>,
     {
         Error {
-            kind: ErrorKind::UnrecognizedEnvironment,
+            kind: ErrorKind::UnrecognizedService,
             cause: Some(err.into()),
         }
     }
@@ -90,8 +90,8 @@ impl Display for Error {
         match &self.kind {
             ErrorKind::Io(path) => write!(f, "{} at {:?}", self.description(), path.as_os_str())?,
             ErrorKind::Snapshot(message) => write!(f, "{}; {}", self.description(), message)?,
-            ErrorKind::UnrecognizedEnvironment => write!(f, "{}", self.description())?,
-            ErrorKind::UnrecognizedSnapshotUrl => write!(f, "{}", self.description())?,
+            ErrorKind::UnrecognizedService => write!(f, "{}", self.description())?,
+            ErrorKind::Remote => write!(f, "{}", self.description())?,
         };
 
         let mut cause = self.source();
@@ -109,8 +109,8 @@ impl StdError for Error {
         match &self.kind {
             ErrorKind::Io(_) => "I/O error",
             ErrorKind::Snapshot(_) => "Snapshot error",
-            ErrorKind::UnrecognizedEnvironment => "Unrecognized environment",
-            ErrorKind::UnrecognizedSnapshotUrl => "Unrecognized snapshot url",
+            ErrorKind::UnrecognizedService => "Unrecognized service",
+            ErrorKind::Remote => "Remote",
         }
     }
 

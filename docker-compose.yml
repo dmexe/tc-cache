@@ -1,6 +1,16 @@
 version: "3"
 
 services:
+  minio:
+    image: "minio/minio"
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ACCESS_KEY: "accessKey"
+      MINIO_SECRET_KEY: "secretKey"
+    volumes:
+      - "/var/run/minio"
+  
   rust_nightly_musl:
     image: "rustlang/rust:nightly"
     command: |

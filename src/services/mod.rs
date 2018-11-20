@@ -1,11 +1,12 @@
 use std::fmt::Display;
 
-mod teamcity_env;
+mod teamcity;
 
-pub use self::teamcity_env::TeamCityEnv;
+pub use self::teamcity::TeamCity;
 
-pub trait Environment: Display {
+pub trait Service: Display {
     fn project_id(&self) -> &str;
     fn is_uploadable(&self) -> bool;
     fn snapshot_url(&self) -> &str;
+    fn into_box(self) -> Box<dyn Service>;
 }

@@ -1,9 +1,10 @@
+use std::env;
 use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{pretty, Config, Environment, Error, Pull, Push, Stats, TeamCityEnv};
+use tc_cache::{pretty, Config, Error, Pull, Push, Service, Stats, TeamCity};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
@@ -20,18 +21,22 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
         .map(Config::from)
         .unwrap_or_else(Config::from_env)?;
 
-    let mut env: Option<Box<dyn Environment>> = None;
+    let mut service: Option<Box<dyn Service>> = None;
 
     if let Some(path) = app.value_of(TEAMCITY_PROPS_FILE_ARG) {
-        env = TeamCityEnv::from_path(path).map(TeamCityEnv::into_box)
+        let teamcity = TeamCity::from_path(path)?;
+        service = Some(teamcity.into_box());
     }
 
-    let environment = match env.or_else(|| TeamCityEnv::from_env().map(TeamCityEnv::into_box)) {
-        Some(env) => env,
-        None => return Err(Error::unrecognized_environment("Unknown")),
+    let service = match service {
+        Some(svc) => svc,
+        None => {
+            let env = env::vars().collect();
+            TeamCity::from_env(&env)?.into_box()
+        }
     };
 
-    info!("{}", environment);
+    info!("{}", service);
 
     if let Some(pull) = app.subcommand_matches(PULL_COMMAND) {
         let directories = pull.values_of(DIRECTORY_ARG).unwrap();

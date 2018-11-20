@@ -7,11 +7,11 @@
 mod bytes;
 mod commands;
 mod config;
-mod environments;
 mod errors;
 mod hashing;
 pub mod pretty;
 mod remote;
+mod services;
 mod snapshot;
 mod stats;
 
@@ -20,6 +20,7 @@ mod testing;
 
 pub use self::commands::{Pull, Push};
 pub use self::config::Config;
-pub use self::environments::{Environment, TeamCityEnv};
 pub use self::errors::{Error, ErrorKind};
+pub use self::remote::Remote;
+pub use self::services::{Service, TeamCity};
 pub use self::stats::Stats;
