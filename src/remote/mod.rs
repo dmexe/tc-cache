@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::convert::TryFrom;
+use std::fmt::{Debug, Display};
 use std::path::PathBuf;
 
 use url::Url;
@@ -23,23 +24,10 @@ pub struct UploadRequest {
     pub tags: HashMap<String, String>,
 }
 
-pub trait Remote: Display {
+pub trait Remote: Display + Debug {
+    fn key(self, key: &str) -> Self;
+
     fn download(&self, req: DownloadRequest) -> Result<(), Error>;
 
     fn upload(&self, req: UploadRequest) -> Result<(), Error>;
-
-    fn into_box(self) -> Box<dyn Remote>;
-}
-
-fn from<S>(uri: S) -> Result<Box<dyn Remote>, Error>
-where
-    S: AsRef<str>,
-{
-    let uri = Url::parse(uri.as_ref()).map_err(Error::remote)?;
-    if uri.scheme() == S3::scheme() {
-        return S3::from(&uri).map(S3::into_box);
-    }
-
-    let err = format!("Unknown remote uri scheme '{}'", uri.scheme());
-    Err(Error::remote(err))
 }

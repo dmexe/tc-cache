@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use log::{info, warn};
+use log::{error, info, warn};
 
 use crate::errors::ResultExt;
+use crate::remote::UploadRequest;
 use crate::snapshot::{self, Entry, Pack, Writing};
-use crate::{mmap, Config, Error, Stats};
+use crate::{mmap, Config, Error, Remote, Stats};
 
 pub struct Push<'a> {
     cfg: &'a Config,
@@ -50,7 +51,23 @@ impl<'a> Push<'a> {
                 snapshot.pack(&cached_dirs)?;
             }
             let meta = &cfg.snapshot_file.metadata().io_err(&cfg.snapshot_file)?;
-            snapshot_len = Some(meta.len() as usize);
+            let len = meta.len() as usize;
+
+            if let Some(ref remote) = &cfg.remote {
+                info!("Attempting to upload snapshot ...");
+                let upload = remote.upload(UploadRequest {
+                    path: cfg.snapshot_file.clone(),
+                    len,
+                    key: Config::snapshot_file_name().into(),
+                    ..Default::default()
+                });
+
+                if let Err(err) = upload {
+                    error!("{}", err);
+                }
+            }
+
+            snapshot_len = Some(len);
         }
 
         Ok((cached_dirs, snapshot_len))

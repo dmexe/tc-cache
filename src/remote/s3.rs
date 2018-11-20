@@ -1,9 +1,11 @@
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::io::{Cursor, Write};
 use std::str::FromStr;
 use std::string::ToString;
 
 use futures::stream::{iter_ok, Stream};
+use futures::sync::oneshot::spawn;
 use futures::Future;
 use rusoto_core::Region;
 use rusoto_s3::{
@@ -11,6 +13,7 @@ use rusoto_s3::{
     CreateMultipartUploadRequest, GetObjectRequest, UploadPartRequest,
 };
 use rusoto_s3::{S3Client, S3 as S3Api};
+use tokio::runtime::Runtime;
 use url::{Host, Url};
 
 use crate::errors::ResultExt;
@@ -92,6 +95,17 @@ impl S3 {
 
         Self { region, ..self }
     }
+
+    fn prefixed<S>(&self, key: S) -> String
+    where
+        S: AsRef<str>,
+    {
+        if let Some(val) = &self.key_prefix {
+            format!("{}/{}", val, key.as_ref())
+        } else {
+            key.as_ref().to_string()
+        }
+    }
 }
 
 impl Display for S3 {
@@ -108,17 +122,32 @@ impl Display for S3 {
 }
 
 impl Remote for S3 {
+    fn key(self, key: &str) -> S3 {
+        let key = match &self.key_prefix {
+            Some(val) => format!("{}/{}", val, key),
+            None => key.to_string(),
+        };
+
+        S3 {
+            key_prefix: Some(key),
+            ..self
+        }
+    }
+
     fn download(&self, req: DownloadRequest) -> Result<(), Error> {
         let client = S3Client::new(self.region.clone());
         let path = &req.path.as_path();
 
         let get_object = GetObjectRequest {
             bucket: self.bucket_name.clone(),
-            key: req.key,
+            key: self.prefixed(&req.key),
             ..Default::default()
         };
 
-        let resp = client.get_object(get_object).sync().io_err(path)?;
+        let resp = client
+            .get_object(get_object)
+            .sync()
+            .map_err(Error::remote)?;
         let body = resp.body.ok_or_else(|| Error::remote("body must be"))?;
         let content_len = resp
             .content_length
@@ -142,18 +171,23 @@ impl Remote for S3 {
     }
 
     fn upload(&self, req: UploadRequest) -> Result<(), Error> {
+        let runtime = Runtime::new().unwrap();
+        let handle = runtime.executor();
+
         let client = S3Client::new(self.region.clone());
+        let key = self.prefixed(&req.key);
 
         let upload = CreateMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
-            key: req.key.clone(),
+            key: key.clone(),
             ..Default::default()
         };
 
         let upload = client
             .create_multipart_upload(upload)
-            .sync()
-            .map_err(Error::remote)?;
+            .map_err(Error::remote);
+
+        let upload = spawn(upload, &handle).wait()?;
 
         let upload_id = upload
             .upload_id
@@ -170,7 +204,7 @@ impl Remote for S3 {
                 let part = UploadPartRequest {
                     body: Some(body.into()),
                     bucket: self.bucket_name.clone(),
-                    key: req.key.to_string(),
+                    key: key.clone(),
                     upload_id: upload_id.clone(),
                     part_number: part_number as i64,
                     ..Default::default()
@@ -185,26 +219,39 @@ impl Remote for S3 {
         let parts = iter_ok(parts)
             .buffered(CONCURRENCY)
             .collect()
-            .wait()
-            .map_err(Error::remote)?;
+            .map_err(Error::remote);
+
+        let parts = spawn(parts, &handle).wait()?;
 
         let complete = CompleteMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
-            key: req.key.clone(),
+            key: key.clone(),
             upload_id,
             multipart_upload: Some(CompletedMultipartUpload { parts: Some(parts) }),
             ..Default::default()
         };
 
-        client
+        let complete = client
             .complete_multipart_upload(complete)
-            .sync()
-            .map_err(Error::remote)?;
+            .map_err(Error::remote);
+
+        spawn(complete, &handle).wait()?;
+
         Ok(())
     }
+}
 
-    fn into_box(self) -> Box<dyn Remote> {
-        Box::new(self)
+impl TryFrom<&str> for S3 {
+    type Error = Error;
+
+    fn try_from(uri: &str) -> Result<Self, Self::Error> {
+        let uri = Url::parse(uri).map_err(Error::remote)?;
+        if uri.scheme() == S3::scheme() {
+            return S3::from(&uri);
+        }
+
+        let err = format!("Unknown remote uri '{}'", uri);
+        Err(Error::remote(err))
     }
 }
 
@@ -273,13 +320,14 @@ mod tests {
 
         let uri = Url::parse("s3://bucket/prefix").unwrap();
         let s3 = S3::from(&uri).unwrap().endpoint("http://127.0.0.1:9000");
+        let s3 = s3.key("projectId");
         let len = { File::open(&B_FILE_PATH).unwrap().metadata().unwrap().len() as usize };
         let dst = temp_file(".s3");
 
         let upload = UploadRequest {
             path: B_FILE_PATH.into(),
             len,
-            key: "projectId".into(),
+            key: "file".into(),
             ..Default::default()
         };
 
@@ -287,7 +335,7 @@ mod tests {
 
         let download = DownloadRequest {
             path: dst.as_ref().to_path_buf(),
-            key: "projectId".into(),
+            key: "file".into(),
         };
 
         s3.download(download).unwrap();

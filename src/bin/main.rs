@@ -1,10 +1,13 @@
+#![feature(try_from)]
+
+use std::convert::TryInto;
 use std::env;
 use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{pretty, Config, Error, Pull, Push, Service, Stats, TeamCity};
+use tc_cache::{pretty, Config, Error, Pull, Push, Remote, Service, Stats, TeamCity, S3};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
@@ -16,7 +19,7 @@ const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
 fn run(app: &ArgMatches) -> Result<(), Error> {
     env_logger::init();
 
-    let cfg = app
+    let mut cfg = app
         .value_of(HOME_ARG)
         .map(Config::from)
         .unwrap_or_else(Config::from_env)?;
@@ -36,7 +39,12 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
         }
     };
 
+    let remote: S3 = service.remote_url().try_into()?;
+    let remote = remote.key(service.project_id());
+
     info!("{}", service);
+
+    cfg.remote(remote);
 
     if let Some(pull) = app.subcommand_matches(PULL_COMMAND) {
         let directories = pull.values_of(DIRECTORY_ARG).unwrap();

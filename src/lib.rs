@@ -22,6 +22,6 @@ mod testing;
 pub use self::commands::{Pull, Push};
 pub use self::config::Config;
 pub use self::errors::{Error, ErrorKind};
-pub use self::remote::Remote;
+pub use self::remote::{Remote, S3};
 pub use self::services::{Service, TeamCity};
 pub use self::stats::Stats;

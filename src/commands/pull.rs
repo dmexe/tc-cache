@@ -6,8 +6,9 @@ use serde::Serialize;
 use serde_json;
 
 use crate::errors::ResultExt;
+use crate::remote::DownloadRequest;
 use crate::snapshot::{Reading, Unpack};
-use crate::{Config, Error, Stats};
+use crate::{Config, Error, Remote, Stats};
 
 #[derive(Debug)]
 pub struct Pull<'a> {
@@ -35,6 +36,18 @@ impl<'a> Pull<'a> {
             unpack_prefix,
         } = self;
 
+        if let Some(ref remote) = cfg.remote {
+            info!("Attempting to download snapshot ...");
+            let download = remote.download(DownloadRequest {
+                key: Config::snapshot_file_name().into(),
+                path: cfg.snapshot_file.clone(),
+            });
+
+            if let Err(err) = download {
+                error!("{}", err);
+            }
+        }
+
         let cached_dirs = cached_dirs
             .into_iter()
             .filter_map(is_cacheable)
@@ -43,10 +56,7 @@ impl<'a> Pull<'a> {
         write_json(&cfg.cached_dirs_file, &cached_dirs)?;
 
         if !cfg.snapshot_file.exists() {
-            warn!(
-                "A previous snapshot wasn't found at {:?}",
-                cfg.snapshot_file.as_os_str()
-            );
+            warn!("The previous snapshot wasn't found");
             return Ok(());
         }
 

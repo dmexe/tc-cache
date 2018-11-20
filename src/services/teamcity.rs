@@ -11,14 +11,14 @@ const TEAMCITY_VERSION_PROP: &str = "env.TEAMCITY_VERSION";
 const TEAMCITY_SERVER_URL_PROP: &str = "teamcity.serverUrl";
 const PROJECT_ID_PROP: &str = "teamcity.project.id";
 const BUILD_BRANCH_IS_DEFAULT_PROP: &str = "teamcity.build.branch.is_default";
-const CACHE_SNAPSHOT_URL_PROP: &str = "tc.cache.snapshot.url";
+const CACHE_REMOTE_URL_PROP: &str = "tc.cache.remote.url";
 const TEAMCITY_BUILD_PROPERTIES_FILE_ENV: &str = "TEAMCITY_BUILD_PROPERTIES_FILE";
 
 pub struct TeamCity {
     name: String,
     project_id: String,
     is_default_branch: bool,
-    snapshot_url: String,
+    remote_url: String,
 }
 
 impl TeamCity {
@@ -63,7 +63,7 @@ impl TeamCity {
         let version = props.key(TEAMCITY_VERSION_PROP)?;
         let server_url = props.key(TEAMCITY_SERVER_URL_PROP)?;
         let project_id = props.key(PROJECT_ID_PROP)?.to_string();
-        let snapshot_url = props.key(CACHE_SNAPSHOT_URL_PROP).map(str::to_string)?;
+        let remote_url = props.key(CACHE_REMOTE_URL_PROP).map(str::to_string)?;
 
         let is_default_branch = props
             .key(BUILD_BRANCH_IS_DEFAULT_PROP)
@@ -75,7 +75,7 @@ impl TeamCity {
             name,
             project_id,
             is_default_branch,
-            snapshot_url,
+            remote_url,
         })
     }
 }
@@ -95,8 +95,8 @@ impl Service for TeamCity {
         self.is_default_branch
     }
 
-    fn snapshot_url(&self) -> &str {
-        self.snapshot_url.as_str()
+    fn remote_url(&self) -> &str {
+        self.remote_url.as_str()
     }
 
     fn into_box(self) -> Box<dyn Service> {
@@ -216,6 +216,6 @@ mod tests {
         );
         assert_eq!(env.project_id(), "Github_Example_Example");
         assert_eq!(env.is_uploadable(), true);
-        assert_eq!(env.snapshot_url(), "s3://bucket/prefix");
+        assert_eq!(env.remote_url(), "s3://bucket/prefix");
     }
 }
