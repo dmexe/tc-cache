@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-use std::fmt::{self, Display};
 use std::io::{Cursor, Write};
 use std::str::FromStr;
 use std::string::ToString;
@@ -7,16 +5,13 @@ use std::string::ToString;
 use futures::stream::{iter_ok, Stream};
 use futures::Future;
 use rusoto_core::Region;
-use rusoto_s3::{
-    CompleteMultipartUploadRequest, CompletedMultipartUpload, CompletedPart,
-    CreateMultipartUploadRequest, GetObjectRequest, UploadPartRequest,
-};
-use rusoto_s3::{S3Client, S3 as S3Api};
+use rusoto_s3::{self as s3_api, S3Client, S3 as S3Api};
 use url::{Host, Url};
 
 use crate::errors::ResultExt;
-use crate::remote::{DownloadRequest, FuturesExt, UploadRequest};
-use crate::{mmap, Error, Remote};
+use crate::remote::backend::{Backend, DownloadRequest, UploadRequest};
+use crate::remote::futures_ext::FuturesExt;
+use crate::{mmap, Error};
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
@@ -32,14 +27,6 @@ pub struct S3 {
 
 impl S3 {
     pub fn from(uri: &Url) -> Result<Self, Error> {
-        match uri.scheme() {
-            S3_URI_SCHEME => {}
-            scheme => {
-                let err = format!("Unknown scheme '{}'", scheme);
-                return Err(Error::remote(err));
-            }
-        };
-
         let bucket_name = match uri.host() {
             Some(Host::Domain(host)) => host.to_string(),
             host => {
@@ -106,37 +93,12 @@ impl S3 {
     }
 }
 
-impl Display for S3 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}://", S3_URI_SCHEME)?;
-        write!(f, "{}", self.bucket_name)?;
-
-        if let Some(ref prefix) = self.key_prefix {
-            write!(f, "/{}", prefix)?;
-        }
-
-        write!(f, "?{}={}", REGION_QUERY_KEY, self.region.name())
-    }
-}
-
-impl Remote for S3 {
-    fn key(self, key: &str) -> S3 {
-        let key = match &self.key_prefix {
-            Some(val) => format!("{}/{}", val, key),
-            None => key.to_string(),
-        };
-
-        S3 {
-            key_prefix: Some(key),
-            ..self
-        }
-    }
-
+impl Backend for S3 {
     fn download(&self, req: DownloadRequest) -> Result<(), Error> {
         let client = S3Client::new(self.region.clone());
         let path = &req.path.as_path();
 
-        let get_object = GetObjectRequest {
+        let get_object = s3_api::GetObjectRequest {
             bucket: self.bucket_name.clone(),
             key: self.prefixed(&req.key),
             ..Default::default()
@@ -173,7 +135,7 @@ impl Remote for S3 {
         let client = S3Client::new(self.region.clone());
         let key = self.prefixed(&req.key);
 
-        let upload = CreateMultipartUploadRequest {
+        let upload = s3_api::CreateMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
             key: key.clone(),
             ..Default::default()
@@ -196,7 +158,7 @@ impl Remote for S3 {
             .map(|(part_number, chunk)| {
                 let part_number = (part_number + 1) as i64;
                 let body = Vec::from(chunk);
-                let part = UploadPartRequest {
+                let part = s3_api::UploadPartRequest {
                     body: Some(body.into()),
                     bucket: self.bucket_name.clone(),
                     key: key.clone(),
@@ -204,10 +166,12 @@ impl Remote for S3 {
                     part_number: part_number as i64,
                     ..Default::default()
                 };
-                client.upload_part(part).map(move |res| CompletedPart {
-                    e_tag: res.e_tag.clone(),
-                    part_number: Some(part_number),
-                })
+                client
+                    .upload_part(part)
+                    .map(move |res| s3_api::CompletedPart {
+                        e_tag: res.e_tag.clone(),
+                        part_number: Some(part_number),
+                    })
             })
             .collect::<Vec<_>>();
 
@@ -217,34 +181,20 @@ impl Remote for S3 {
             .map_err(Error::remote)
             .sync()?;
 
-        let complete = CompleteMultipartUploadRequest {
+        let complete = s3_api::CompleteMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
             key: key.clone(),
             upload_id,
-            multipart_upload: Some(CompletedMultipartUpload { parts: Some(parts) }),
+            multipart_upload: Some(s3_api::CompletedMultipartUpload { parts: Some(parts) }),
             ..Default::default()
         };
 
-        let complete = client
+        client
             .complete_multipart_upload(complete)
             .map_err(Error::remote)
             .sync()?;
 
         Ok(())
-    }
-}
-
-impl TryFrom<&str> for S3 {
-    type Error = Error;
-
-    fn try_from(uri: &str) -> Result<Self, Self::Error> {
-        let uri = Url::parse(uri).map_err(Error::remote)?;
-        if uri.scheme() == S3::scheme() {
-            return S3::from(&uri);
-        }
-
-        let err = format!("Unknown remote uri '{}'", uri);
-        Err(Error::remote(err))
     }
 }
 

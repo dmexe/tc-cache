@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 use log::{error, info, warn};
 
 use crate::errors::ResultExt;
-use crate::remote::UploadRequest;
 use crate::snapshot::{self, Entry, Pack, Writing};
-use crate::{mmap, Config, Error, Remote, Stats};
+use crate::{mmap, Config, Error, Stats};
 
 pub struct Push<'a> {
     cfg: &'a Config,
@@ -21,12 +20,11 @@ impl<'a> Push<'a> {
     pub fn run(self) -> Result<(Vec<PathBuf>, Option<usize>), Error> {
         let Self { cfg } = self;
         let mut changed = true;
-        let mut snapshot_len = None;
 
         let cached_dirs = read_cached_dirs(&cfg.cached_dirs_file)?;
         if cached_dirs.is_empty() {
             warn!("No cached directories found, exiting");
-            return Ok((cached_dirs, snapshot_len));
+            return Ok((cached_dirs, None));
         }
 
         let previous_entries = read_cached_entries(&cfg.cached_entries_file)?;
@@ -43,34 +41,29 @@ impl<'a> Push<'a> {
             changed = detect_changes(&diff);
         }
 
-        if changed {
-            info!("Creating a new snapshot ...");
-            {
-                let _timer = Stats::current().packing().timer();
-                let snapshot = Writing::open(&cfg.snapshot_file)?;
-                snapshot.pack(&cached_dirs)?;
-            }
-            let meta = &cfg.snapshot_file.metadata().io_err(&cfg.snapshot_file)?;
-            let len = meta.len() as usize;
-
-            if let Some(ref remote) = &cfg.remote {
-                info!("Attempting to upload snapshot ...");
-                let upload = remote.upload(UploadRequest {
-                    path: cfg.snapshot_file.clone(),
-                    len,
-                    key: Config::snapshot_file_name().into(),
-                    ..Default::default()
-                });
-
-                if let Err(err) = upload {
-                    error!("{}", err);
-                }
-            }
-
-            snapshot_len = Some(len);
+        if !changed {
+            return Ok((cached_dirs, None));
         }
 
-        Ok((cached_dirs, snapshot_len))
+        info!("Creating a new snapshot ...");
+        {
+            let _timer = Stats::current().packing().timer();
+            let snapshot = Writing::open(&cfg.snapshot_file)?;
+            snapshot.pack(&cached_dirs)?;
+        }
+
+        let meta = &cfg.snapshot_file.metadata().io_err(&cfg.snapshot_file)?;
+        let len = meta.len() as usize;
+
+        if let Some(ref remote) = cfg.remote {
+            info!("Attempting to upload snapshot ...");
+
+            if let Err(err) = remote.upload(&cfg.snapshot_file, len) {
+                error!("{}", err);
+            }
+        }
+
+        Ok((cached_dirs, Some(len)))
     }
 }
 

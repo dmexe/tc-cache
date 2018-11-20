@@ -1,36 +1,105 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fmt::{Debug, Display};
-use std::path::PathBuf;
+use std::path::Path;
 
 use url::Url;
 
-mod futures_ext;
-mod s3;
-
-pub use self::futures_ext::FuturesExt;
-pub use self::s3::S3;
-
 use crate::Error;
 
+mod backend;
+mod futures_ext;
+
 #[derive(Debug)]
-pub struct DownloadRequest {
-    pub path: PathBuf,
-    pub key: String,
+pub struct Remote {
+    backend: Box<dyn backend::Backend>,
+    key_prefix: Option<String>,
 }
 
-#[derive(Debug, Default)]
-pub struct UploadRequest {
-    pub path: PathBuf,
-    pub len: usize,
-    pub key: String,
-    pub tags: HashMap<String, String>,
+impl Remote {
+    pub fn from<S>(uri: S) -> Result<Self, Error>
+    where
+        S: AsRef<str>,
+    {
+        let uri = Url::parse(uri.as_ref()).map_err(Error::remote)?;
+
+        if uri.scheme() == backend::S3::scheme() {
+            let s3 = backend::S3::from(&uri)?;
+            return Ok(Remote {
+                backend: Box::new(s3),
+                key_prefix: None,
+            });
+        }
+
+        let err = format!("Unknown remote uri '{}'", uri);
+        Err(Error::remote(err))
+    }
+
+    pub fn prefix<S>(self, key: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        let key_prefix = match &self.key_prefix {
+            Some(val) => format!("{}/{}", val, key.as_ref()),
+            None => key.as_ref().to_string(),
+        };
+
+        Self {
+            key_prefix: Some(key_prefix),
+            ..self
+        }
+    }
+
+    pub fn download<P>(&self, path: P) -> Result<(), Error>
+    where
+        P: AsRef<Path>,
+    {
+        let file_name = file_name(&path)?;
+        let file_name = self.prefixed(file_name);
+
+        let req = backend::DownloadRequest {
+            path: path.as_ref().to_path_buf(),
+            key: file_name,
+        };
+
+        self.backend.download(req)
+    }
+
+    pub fn upload<P>(&self, path: P, len: usize) -> Result<(), Error>
+    where
+        P: AsRef<Path>,
+    {
+        let file_name = file_name(&path)?;
+        let file_name = self.prefixed(file_name);
+
+        let req = backend::UploadRequest {
+            path: path.as_ref().to_path_buf(),
+            key: file_name,
+            len: len,
+        };
+
+        self.backend.upload(req)
+    }
+
+    fn prefixed<S>(&self, key: S) -> String
+    where
+        S: AsRef<str>,
+    {
+        if let Some(prefix) = &self.key_prefix {
+            format!("{}/{}", prefix, key.as_ref())
+        } else {
+            key.as_ref().to_string()
+        }
+    }
 }
 
-pub trait Remote: Display + Debug {
-    fn key(self, key: &str) -> Self;
-
-    fn download(&self, req: DownloadRequest) -> Result<(), Error>;
-
-    fn upload(&self, req: UploadRequest) -> Result<(), Error>;
+fn file_name<P>(path: P) -> Result<String, Error>
+where
+    P: AsRef<Path>,
+{
+    path.as_ref()
+        .file_name()
+        .and_then(|it| it.to_str())
+        .map(|it| it.to_string())
+        .ok_or_else(|| {
+            let err = format!("Empty file name for {:?}", path.as_ref());
+            Error::remote(err)
+        })
 }

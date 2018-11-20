@@ -1,13 +1,10 @@
-#![feature(try_from)]
-
-use std::convert::TryInto;
 use std::env;
 use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{pretty, Config, Error, Pull, Push, Remote, Service, Stats, TeamCity, S3};
+use tc_cache::{pretty, Config, Error, Pull, Push, Remote, Service, Stats, TeamCity};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
@@ -39,8 +36,8 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
         }
     };
 
-    let remote: S3 = service.remote_url().try_into()?;
-    let remote = remote.key(service.project_id());
+    let remote = Remote::from(service.remote_url())?;
+    let remote = remote.prefix(service.project_id());
 
     info!("{}", service);
 

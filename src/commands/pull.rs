@@ -6,9 +6,8 @@ use serde::Serialize;
 use serde_json;
 
 use crate::errors::ResultExt;
-use crate::remote::DownloadRequest;
 use crate::snapshot::{Reading, Unpack};
-use crate::{Config, Error, Remote, Stats};
+use crate::{Config, Error, Stats};
 
 #[derive(Debug)]
 pub struct Pull<'a> {
@@ -38,12 +37,8 @@ impl<'a> Pull<'a> {
 
         if let Some(ref remote) = cfg.remote {
             info!("Attempting to download snapshot ...");
-            let download = remote.download(DownloadRequest {
-                key: Config::snapshot_file_name().into(),
-                path: cfg.snapshot_file.clone(),
-            });
 
-            if let Err(err) = download {
+            if let Err(err) = remote.download(&cfg.snapshot_file) {
                 error!("{}", err);
             }
         }

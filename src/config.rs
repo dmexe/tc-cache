@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::errors::ResultExt;
-use crate::{Error, S3};
+use crate::{Error, Remote};
 
 #[derive(Debug)]
 pub struct Config {
@@ -11,7 +11,7 @@ pub struct Config {
     pub cached_dirs_file: PathBuf,
     pub cached_entries_file: PathBuf,
     pub snapshot_file: PathBuf,
-    pub remote: Option<S3>,
+    pub remote: Option<Remote>,
 }
 
 impl Config {
@@ -55,7 +55,7 @@ impl Config {
         "snapshot.snappy"
     }
 
-    pub fn remote(&mut self, s3: S3) {
-        self.remote = Some(s3);
+    pub fn remote(&mut self, remote: Remote) {
+        self.remote = Some(remote);
     }
 }
