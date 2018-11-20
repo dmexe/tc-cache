@@ -9,6 +9,7 @@ mod commands;
 mod config;
 mod errors;
 mod hashing;
+mod mmap;
 pub mod pretty;
 mod remote;
 mod services;

@@ -1,13 +1,12 @@
 use std::fmt::{self, Display};
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
 
 use futures::stream::{self as fstream, Stream};
 use futures::Future;
-use memmap::MmapOptions;
 use rusoto_core::Region;
 use rusoto_s3::{
     CompleteMultipartUploadRequest, CompletedMultipartUpload, CompletedPart,
@@ -18,8 +17,7 @@ use url::{Host, Url};
 
 use crate::errors::ResultExt;
 use crate::remote::{DownloadRequest, UploadRequest};
-use crate::Error;
-use crate::Remote;
+use crate::{mmap, Error, Remote};
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
@@ -124,17 +122,21 @@ impl Remote for S3 {
 
         let resp = client.get_object(get_object).sync().io_err(path)?;
         let body = resp.body.ok_or_else(|| Error::remote("body must be"))?;
+        let content_len = resp
+            .content_length
+            .ok_or_else(|| Error::remote("content length must be"))?;
+        let content_len = content_len as usize;
 
-        let mut opts = OpenOptions::new();
-        let mut file = opts
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(path)
-            .io_err(path)?;
+        if content_len < 1 {
+            let err = format!("Content length must be positive, got {}", content_len);
+            return Err(Error::remote(err));
+        }
+
+        let (mut _file, mut dst) = mmap::write(path, content_len)?;
+        let mut cursor = Cursor::new(dst.as_mut());
 
         body.map_err(Error::remote)
-            .and_then(|chunk| file.write_all(&chunk).io_err(path))
+            .and_then(|chunk| cursor.write_all(&chunk).io_err(&path))
             .collect()
             .wait()?;
 
@@ -143,13 +145,6 @@ impl Remote for S3 {
 
     fn upload(&self, req: UploadRequest) -> Result<(), Error> {
         let client = S3Client::new(self.region.clone());
-
-        let file = File::open(&req.path).io_err(&req.path)?;
-        let mut opts = MmapOptions::new();
-        opts.len(req.len);
-
-        let src = unsafe { opts.map(&file) };
-        let src = src.io_err(&req.path)?;
 
         let upload = CreateMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
@@ -161,9 +156,12 @@ impl Remote for S3 {
             .create_multipart_upload(upload)
             .sync()
             .map_err(Error::remote)?;
+
         let upload_id = upload
             .upload_id
             .ok_or_else(|| Error::remote("upload_id cannot be empty"))?;
+
+        let (_file, src) = mmap::read(&req.path)?;
 
         let parts = src
             .chunks(CHUNK_SIZE)
