@@ -5,7 +5,6 @@ use std::str::FromStr;
 use std::string::ToString;
 
 use futures::stream::{iter_ok, Stream};
-use futures::sync::oneshot::spawn;
 use futures::Future;
 use rusoto_core::Region;
 use rusoto_s3::{
@@ -13,16 +12,15 @@ use rusoto_s3::{
     CreateMultipartUploadRequest, GetObjectRequest, UploadPartRequest,
 };
 use rusoto_s3::{S3Client, S3 as S3Api};
-use tokio::runtime::Runtime;
 use url::{Host, Url};
 
 use crate::errors::ResultExt;
-use crate::remote::{DownloadRequest, UploadRequest};
+use crate::remote::{DownloadRequest, FuturesExt, UploadRequest};
 use crate::{mmap, Error, Remote};
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
-const CHUNK_SIZE: usize = 1024 * 1024 * 10; // 1mb
+const CHUNK_SIZE: usize = 1024 * 1024 * 10; // 10mb
 const CONCURRENCY: usize = 10;
 
 #[derive(Debug)]
@@ -36,7 +34,7 @@ impl S3 {
     pub fn from(uri: &Url) -> Result<Self, Error> {
         match uri.scheme() {
             S3_URI_SCHEME => {}
-            scheme @ _ => {
+            scheme => {
                 let err = format!("Unknown scheme '{}'", scheme);
                 return Err(Error::remote(err));
             }
@@ -44,7 +42,7 @@ impl S3 {
 
         let bucket_name = match uri.host() {
             Some(Host::Domain(host)) => host.to_string(),
-            host @ _ => {
+            host => {
                 let err = format!("Unrecognized bucket '{:?}'", host);
                 return Err(Error::remote(err));
             }
@@ -146,13 +144,14 @@ impl Remote for S3 {
 
         let resp = client
             .get_object(get_object)
-            .sync()
-            .map_err(Error::remote)?;
+            .map_err(Error::remote)
+            .sync()?;
+
         let body = resp.body.ok_or_else(|| Error::remote("body must be"))?;
         let content_len = resp
             .content_length
+            .map(|it| it as usize)
             .ok_or_else(|| Error::remote("content length must be"))?;
-        let content_len = content_len as usize;
 
         if content_len < 1 {
             let err = format!("Content length must be positive, got {}", content_len);
@@ -171,9 +170,6 @@ impl Remote for S3 {
     }
 
     fn upload(&self, req: UploadRequest) -> Result<(), Error> {
-        let runtime = Runtime::new().unwrap();
-        let handle = runtime.executor();
-
         let client = S3Client::new(self.region.clone());
         let key = self.prefixed(&req.key);
 
@@ -185,9 +181,8 @@ impl Remote for S3 {
 
         let upload = client
             .create_multipart_upload(upload)
-            .map_err(Error::remote);
-
-        let upload = spawn(upload, &handle).wait()?;
+            .map_err(Error::remote)
+            .sync()?;
 
         let upload_id = upload
             .upload_id
@@ -219,9 +214,8 @@ impl Remote for S3 {
         let parts = iter_ok(parts)
             .buffered(CONCURRENCY)
             .collect()
-            .map_err(Error::remote);
-
-        let parts = spawn(parts, &handle).wait()?;
+            .map_err(Error::remote)
+            .sync()?;
 
         let complete = CompleteMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
@@ -233,9 +227,8 @@ impl Remote for S3 {
 
         let complete = client
             .complete_multipart_upload(complete)
-            .map_err(Error::remote);
-
-        spawn(complete, &handle).wait()?;
+            .map_err(Error::remote)
+            .sync()?;
 
         Ok(())
     }
@@ -282,7 +275,7 @@ mod tests {
                 "s3://bucket-name/prefix?region="
             ),
             (
-                "s3://bucket-name", 
+                "s3://bucket-name",
                 "s3://bucket-name?region="
             ),
         ];
@@ -300,8 +293,8 @@ mod tests {
     #[test]
     fn parse_err() {
         #[rustfmt::skip]
-        let params = vec! { 
-            "http://example.com" 
+        let params = vec! {
+            "http://example.com"
         };
 
         for uri in params {

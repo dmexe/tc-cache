@@ -5,9 +5,12 @@ use std::path::PathBuf;
 
 use url::Url;
 
+mod futures_ext;
 mod s3;
 
+pub use self::futures_ext::FuturesExt;
 pub use self::s3::S3;
+
 use crate::Error;
 
 #[derive(Debug)]
