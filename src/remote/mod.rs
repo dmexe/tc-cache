@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use url::Url;
 

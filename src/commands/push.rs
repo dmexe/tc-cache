@@ -3,11 +3,10 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use log::{info, warn};
-use memmap::MmapOptions;
 
 use crate::errors::ResultExt;
 use crate::snapshot::{self, Entry, Pack, Writing};
-use crate::{Config, Error, Stats};
+use crate::{mmap, Config, Error, Stats};
 
 pub struct Push<'a> {
     cfg: &'a Config,
@@ -82,12 +81,8 @@ fn read_cached_entries(path: &Path) -> Result<Vec<Entry>, Error> {
 
     info!("Reading previously cached entries ...");
 
-    let file = File::open(&path).io_err(&path)?;
-    let mmap = MmapOptions::new();
-    let mmap = unsafe { mmap.map(&file) };
-    let mmap = mmap.io_err(&path)?;
-
-    serde_json::from_slice(mmap.as_ref()).io_err(&path)
+    let (_, _, src) = mmap::read(&path, None)?;
+    serde_json::from_slice(&src).io_err(&path)
 }
 
 fn read_cached_dirs(path: &Path) -> Result<Vec<PathBuf>, Error> {

@@ -1,11 +1,11 @@
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 
 use crate::bytes::IntoLeBytes;
 use crate::errors::ResultExt;
-use crate::snapshot::{Entry, MEM_MAP_THRESHOLD, VERSION};
-use crate::{Error, Stats};
+use crate::snapshot::{Entry, BUFFER_SIZE, VERSION};
+use crate::{mmap, Error, Stats};
 
 #[derive(Debug)]
 pub struct Writing<W = ()> {
@@ -70,33 +70,22 @@ impl<W: Write> Writing<W> {
         Ok(written)
     }
 
-    pub fn write_file<P>(&mut self, file: &mut File, path: P, len: usize) -> Result<usize, Error>
+    pub fn write_file<P>(&mut self, path: P, len: Option<usize>) -> Result<usize, Error>
     where
         P: AsRef<Path>,
     {
-        Stats::current().packing().inc(len);
-
+        let (_, len, src) = mmap::read(&path, len)?;
         if len == 0 {
             return Ok(0);
         }
 
-        if len < MEM_MAP_THRESHOLD {
-            let mut buf = vec![0u8; len];
-            file.read_exact(&mut buf).io_err(path)?;
+        for chunk in src.chunks(BUFFER_SIZE) {
             self.writer
-                .write_all(&buf)
-                .snapshot_err("Write data failed")?;
-        } else {
-            let mut opts = memmap::MmapOptions::new();
-
-            opts.len(len);
-            let mapped = unsafe { opts.map(&file) };
-            let mapped = mapped.io_err(&path)?;
-
-            self.writer
-                .write_all(mapped.as_ref())
+                .write_all(&chunk)
                 .snapshot_err("Write data failed")?;
         }
+
+        Stats::current().packing().inc(len);
 
         Ok(len)
     }
@@ -124,8 +113,7 @@ mod tests {
         assert_eq!(written, 129);
 
         let (path, _, _, len) = file_entry.as_file().unwrap();
-        let mut file = File::open(&path).io_err(&path).unwrap();
-        let written = snapshot.write_file(&mut file, &path, len).unwrap();
+        let written = snapshot.write_file(&path, Some(len)).unwrap();
         assert_eq!(written, 82944);
 
         snapshot.flush().unwrap();

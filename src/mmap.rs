@@ -1,26 +1,30 @@
 use std::fs::{File, OpenOptions as FileOptions};
-use std::io::{Seek, SeekFrom, Write};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
 
-use memmap::{Mmap, MmapMut, MmapOptions};
+use memmap::MmapOptions;
+pub use memmap::{Mmap, MmapMut};
 
 use crate::errors::ResultExt;
 use crate::Error;
 
-pub fn read<P>(path: P) -> Result<(File, Mmap), Error>
+pub fn read<P>(path: P, len: Option<usize>) -> Result<(File, usize, Mmap), Error>
 where
     P: AsRef<Path>,
 {
     let file = File::open(&path).io_err(&path)?;
-    let len = file.metadata().io_err(&path)?.len() as usize;
     let mut opts = MmapOptions::new();
+
+    let len = match len {
+        Some(val) => val,
+        None => file.metadata().io_err(&path)?.len() as usize,
+    };
     opts.len(len);
 
     let mmap = unsafe { opts.map(&file) };
     let mmap = mmap.io_err(&path)?;
 
-    Ok((file, mmap))
+    Ok((file, len, mmap))
 }
 
 pub fn write<P>(path: P, len: usize) -> Result<(File, MmapMut), Error>

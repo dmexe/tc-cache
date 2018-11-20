@@ -1,14 +1,12 @@
-use std::fs::OpenOptions;
 use std::io::ErrorKind::UnexpectedEof;
 use std::io::{Cursor, Error as IoError, Read, Write};
 use std::path::Path;
 
-use memmap::{Mmap, MmapOptions};
-
 use crate::bytes::FromLeBytes;
 use crate::errors::ResultExt;
+use crate::mmap::Mmap;
 use crate::snapshot::{Entry, BUFFER_SIZE, VERSION, VERSION_LEN};
-use crate::{Error, Stats};
+use crate::{mmap, Error, Stats};
 
 #[derive(Debug)]
 pub struct Reading<R = ()> {
@@ -26,13 +24,8 @@ impl Reading {
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Reading<snap::Reader<Cursor<Mmap>>>, Error> {
-        let file = OpenOptions::new().read(true).open(&path).io_err(&path)?;
-
-        let opts = MmapOptions::new();
-        let mapped = unsafe { opts.map(&file) };
-        let mapped = mapped.io_err(&path)?;
-
-        Reading::from(Cursor::new(mapped))
+        let (_, _, src) = mmap::read(&path, None)?;
+        Reading::from(Cursor::new(src))
     }
 }
 
@@ -134,7 +127,7 @@ mod tests {
 
     #[test]
     fn read_file_entry() {
-        let dst = testing::temp_file(".sn");
+        let dst = testing::temp_file(".snappy");
 
         {
             let mut snapshot = Writing::open(&dst).unwrap();
@@ -143,9 +136,7 @@ mod tests {
             snapshot.write_entry(&file_entry).unwrap();
 
             let (path, _, _, len) = file_entry.as_file().unwrap();
-            let mut file = File::open(&path).io_err(&path).unwrap();
-
-            snapshot.write_file(&mut file, &path, len).unwrap();
+            snapshot.write_file(&path, Some(len)).unwrap();
             snapshot.flush().unwrap();
         }
 

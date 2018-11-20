@@ -1,11 +1,9 @@
 use std::fmt::{self, Display};
-use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Write};
-use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
 
-use futures::stream::{self as fstream, Stream};
+use futures::stream::{iter_ok, Stream};
 use futures::Future;
 use rusoto_core::Region;
 use rusoto_s3::{
@@ -105,7 +103,7 @@ impl Display for S3 {
             write!(f, "/{}", prefix)?;
         }
 
-        write!(f, "?{}={:?}", REGION_QUERY_KEY, self.region)
+        write!(f, "?{}={}", REGION_QUERY_KEY, self.region.name())
     }
 }
 
@@ -161,7 +159,7 @@ impl Remote for S3 {
             .upload_id
             .ok_or_else(|| Error::remote("upload_id cannot be empty"))?;
 
-        let (_file, src) = mmap::read(&req.path)?;
+        let (_, _, src) = mmap::read(&req.path, None)?;
 
         let parts = src
             .chunks(CHUNK_SIZE)
@@ -184,7 +182,7 @@ impl Remote for S3 {
             })
             .collect::<Vec<_>>();
 
-        let parts = fstream::iter_ok(parts)
+        let parts = iter_ok(parts)
             .buffered(CONCURRENCY)
             .collect()
             .wait()

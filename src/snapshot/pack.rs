@@ -1,8 +1,6 @@
-use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use crate::errors::ResultExt;
 use crate::snapshot::{Entry, Writing};
 use crate::Error;
 
@@ -30,8 +28,9 @@ impl<W: Write> Pack for Writing<W> {
             written += self.write_entry(&entry)?;
 
             if let Some((path, _, _, len)) = entry.as_file() {
-                let mut file = File::open(&path).io_err(&path)?;
-                written += self.write_file(&mut file, &path, len)?;
+                if len > 0 {
+                    written += self.write_file(&path, Some(len))?;
+                }
             }
         }
         self.flush()?;

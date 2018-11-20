@@ -3,6 +3,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
 use std::path::Path;
 
 use digest_md5::{Digest, Md5};
+use memmap::MmapOptions;
 
 use crate::Stats;
 
@@ -71,7 +72,7 @@ fn hash_mapped_file<D: Digest>(file: &File, mut hasher: D, len: usize) -> Result
     let stats = Stats::current().hashing().timer();
     stats.bytes(len);
 
-    let mut opts = memmap::MmapOptions::new();
+    let mut opts = MmapOptions::new();
     opts.len(len as usize);
 
     let mapped = unsafe { opts.map(file) };
