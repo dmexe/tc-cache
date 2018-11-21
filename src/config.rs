@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use crate::errors::ResultExt;
 use crate::{Error, Remote};
 
+const WORK_DIR: &str = ".tc-cache";
+
 #[derive(Debug)]
 pub struct Config {
     pub working_dir: PathBuf,
@@ -17,7 +19,7 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
         let home = env::var("HOME").unwrap_or_else(|_| ".".into());
-        let working_dir = Path::new(home.as_str()).join(".tc-cache");
+        let working_dir = Path::new(home.as_str()).join(WORK_DIR);
         Config::from(working_dir)
     }
 
