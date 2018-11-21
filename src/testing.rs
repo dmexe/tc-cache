@@ -8,6 +8,7 @@ pub const B_FILE_PATH: &str = "tests/fixtures/snapshot/b.txt";
 pub const IS_SYMLINK_PATH: &str = "tests/fixtures/snapshot/is_symlink";
 pub const IS_DIR_PATH: &str = "tests/fixtures/snapshot/is_dir";
 pub const TEAMCITY_BUILD_PROPS_PATH: &str = "tests/fixtures/teamcity/build.properties";
+pub const TEAMCITY_CONFIG_PROPS_PATH: &str = "tests/fixtures/teamcity/config.properties";
 
 #[derive(Debug)]
 pub struct FileGuard(Option<NamedTempFile>);

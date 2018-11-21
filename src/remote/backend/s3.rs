@@ -258,7 +258,11 @@ mod tests {
 
     #[test]
     fn upload() {
-        let endpoint = env::var("S3_ENDPOINT").unwrap_or("http://localhost:9000".into());
+        let endpoint = match env::var("S3_ENDPOINT") {
+            Ok(val) => val,
+            Err(_) => return,
+        };
+
         let uri = Url::parse("s3://bucket/prefix").unwrap();
         let s3 = S3::from(&uri).unwrap().endpoint(endpoint);
         let len = { File::open(&B_FILE_PATH).unwrap().metadata().unwrap().len() as usize };
