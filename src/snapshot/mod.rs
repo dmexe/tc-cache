@@ -7,7 +7,7 @@ mod unpack;
 mod writing;
 
 pub use self::constants::*;
-pub use self::diff::diff;
+pub use self::diff::{diff, Diff};
 pub use self::entry::{Attributes, Entry, EntryKind};
 pub use self::pack::Pack;
 pub use self::reading::Reading;

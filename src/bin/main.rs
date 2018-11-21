@@ -12,6 +12,7 @@ const PREFIX_ARG: &str = "prefix";
 const HOME_ARG: &str = "home";
 const DIRECTORY_ARG: &str = "directory";
 const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
+const VERBOSE: &str = "verbose";
 
 fn run(app: &ArgMatches) -> Result<(), Error> {
     env_logger::init();
@@ -26,6 +27,10 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
     if let Some(path) = app.value_of(TEAMCITY_PROPS_FILE_ARG) {
         let teamcity = TeamCity::from_path(path)?;
         service = Some(teamcity.into_box());
+    }
+
+    if app.is_present(VERBOSE) {
+        cfg.verbose(true);
     }
 
     let service = match service {
@@ -101,7 +106,8 @@ fn main() {
                 .long("home")
                 .short("d")
                 .value_name("directory")
-                .help("Set working directory (default '~/.tc-cache')"),
+                .help("Set working directory (default '~/.tc-cache')")
+                .global(true),
         )
         .arg(
             Arg::with_name(TEAMCITY_PROPS_FILE_ARG)
@@ -109,7 +115,15 @@ fn main() {
                 .long("build-props")
                 .value_name("file")
                 .env("TEAMCITY_BUILD_PROPERTIES_FILE")
-                .help("[advanced] override teamcity's build properties file"),
+                .help("[advanced] override teamcity's build properties file")
+                .global(true),
+        )
+        .arg(
+            Arg::with_name(VERBOSE)
+                .long("verbose")
+                .short("v")
+                .help("Enable debug output")
+                .global(true),
         )
         .subcommand(pull)
         .subcommand(push)

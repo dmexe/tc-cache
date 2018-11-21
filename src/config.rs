@@ -14,6 +14,7 @@ pub struct Config {
     pub cached_entries_file: PathBuf,
     pub snapshot_file: PathBuf,
     pub remote: Option<Remote>,
+    pub verbose: bool,
 }
 
 impl Config {
@@ -50,6 +51,7 @@ impl Config {
             cached_entries_file,
             snapshot_file,
             remote: None,
+            verbose: false,
         })
     }
 
@@ -59,5 +61,9 @@ impl Config {
 
     pub fn remote(&mut self, remote: Remote) {
         self.remote = Some(remote);
+    }
+
+    pub fn verbose(&mut self, verbose: bool) {
+        self.verbose = verbose;
     }
 }

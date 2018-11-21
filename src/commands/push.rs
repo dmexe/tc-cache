@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use log::{error, info, warn};
 
 use crate::errors::ResultExt;
-use crate::snapshot::{self, Entry, Pack, Writing};
+use crate::snapshot::{self, Diff, Entry, Pack, Writing};
 use crate::{mmap, Config, Error, Stats};
 
 pub struct Push<'a> {
@@ -38,7 +38,7 @@ impl<'a> Push<'a> {
             warn!("No files from a previous snapshot, assume it isn't cached before");
         } else {
             let diff = snapshot::diff(&previous_entries, &current_entries);
-            changed = detect_changes(&diff);
+            changed = detect_changes(&diff, cfg.verbose);
         }
 
         if !changed {
@@ -67,21 +67,37 @@ impl<'a> Push<'a> {
     }
 }
 
-fn detect_changes(diff: &HashSet<&Path>) -> bool {
-    let len = diff.len();
-    let next = diff.iter().next();
-
-    if let Some(next) = next {
-        if len == 1 {
-            info!("Changes detected; {:?}", next);
-        } else {
-            info!("Changed detected; {:?} plus {} files", next, len - 1);
+fn detect_changes(diff: &HashSet<Diff>, verbose: bool) -> bool {
+    let next = match diff.iter().next() {
+        Some(val) => val,
+        None => {
+            info!("No changes detected");
+            return false;
         }
+    };
+
+    if verbose {
+        detect_changes_verbose(&diff);
     } else {
-        info!("No changes detected");
+        let len = diff.len();
+        if len == 1 {
+            info!("Changes detected; {:?}", next.as_path());
+        } else {
+            info!(
+                "Changed detected; {:?} plus {} files",
+                next.as_path(),
+                len - 1
+            );
+        }
     }
 
-    next.is_some()
+    true
+}
+
+fn detect_changes_verbose(diff: &HashSet<Diff>) {
+    for it in diff {
+        info!("{}", it);
+    }
 }
 
 fn read_cached_entries(path: &Path) -> Result<Vec<Entry>, Error> {
@@ -113,9 +129,14 @@ mod tests {
 
     #[test]
     fn push() {
+        env_logger::init();
+
         let work = testing::temp_dir();
         let dst = testing::temp_dir();
-        let cfg = Config::from(&work).unwrap();
+
+        let mut cfg = Config::from(&work).unwrap();
+        cfg.verbose(true);
+
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
         let pull = Pull::new(&cfg, dirs.clone(), Some(dst));
         let push = Push::new(&cfg);

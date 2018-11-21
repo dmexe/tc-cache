@@ -8,7 +8,7 @@ use std::os::unix::fs::MetadataExt as UnixMetadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use log::{error, debug};
+use log::{debug, error};
 use rayon::prelude::ParallelIterator;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
@@ -16,7 +16,7 @@ use walkdir::{DirEntry, WalkDir};
 use crate::errors::ResultExt;
 use crate::{hashing, Error, Stats};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Hash, Eq)]
 pub struct Attributes {
     pub mode: u32,
     pub atime: i64,
@@ -49,7 +49,7 @@ pub enum EntryKind {
     Dir,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 #[serde(tag = "_t")]
 pub enum Entry {
     #[serde(rename = "f")]
@@ -127,7 +127,7 @@ impl Entry {
         rayon::spawn(move || {
             for dir in dirs {
                 let walker = WalkDir::new(&dir).follow_links(false).max_open(256);
-                
+
                 for item in walker {
                     debug!("walk {:?}", item);
                     Stats::current().walking().inc(1);
@@ -139,7 +139,7 @@ impl Entry {
                         error!("Cannot send entry into channel (is consumer dead?), exiting");
                         return;
                     }
-                    
+
                     if is_err {
                         return;
                     }
@@ -255,15 +255,20 @@ impl Entry {
             Entry::Dir { .. } => None,
         }
     }
-}
 
-impl AsRef<Path> for Entry {
-    fn as_ref(&self) -> &Path {
+    pub fn as_path(&self) -> &Path {
         match &self {
             Entry::File { path, .. } => path.as_path(),
             Entry::Symlink { path, .. } => path.as_path(),
             Entry::Dir { path, .. } => path.as_path(),
         }
+    }
+}
+
+impl AsRef<Path> for Entry {
+    #[inline]
+    fn as_ref(&self) -> &Path {
+        self.as_path()
     }
 }
 
