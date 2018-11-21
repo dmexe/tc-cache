@@ -16,24 +16,22 @@ services:
     volumes:
       - "/var/run/minio"
   
-  rust_nightly_musl:
-    image: "rustlang/rust:nightly"
+  nightly_musl:
+    build:
+      context: scripts/nigthly_musl
     command: |
       bash -ex -c '
-      apt-get update -qy                             &&
-      apt-get install musl-tools -qq                 &&
-      rustup target add x86_64-unknown-linux-musl    &&
-      cargo fetch                                    &&
-      cargo build $${CARGO_ARGS} --tests             &&
-      cargo test $${CARGO_ARGS} -- --nocapture       &&
-      cargo build $${CARGO_ARGS} --bin main --release'
+      cargo fetch                                     &&
+      cargo build $${CARGO_ARGS} --tests              &&
+      cargo test $${CARGO_ARGS} -- --nocapture        &&
+      cargo build $${CARGO_ARGS} --bin main --release &&
+      upx target/$${TARGET}/release/main              &&
+      true'
     volumes:
       - "./:/app"
     environment:
+      TARGET: "x86_64-unknown-linux-musl"
       CARGO_ARGS: "--color always --target=x86_64-unknown-linux-musl"
       AWS_ACCESS_KEY_ID: "accessKey"
       AWS_SECRET_ACCESS_KEY: "secretKey"
-      S3_ENDPOINT: "http://minio:9000"
     working_dir: "/app"
-    depends_on:
-      - minio

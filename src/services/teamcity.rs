@@ -7,12 +7,13 @@ use std::path::Path;
 use crate::errors::ResultExt;
 use crate::{Error, Service};
 
-const TEAMCITY_VERSION_PROP: &str = "env.TEAMCITY_VERSION";
-const TEAMCITY_SERVER_URL_PROP: &str = "teamcity.serverUrl";
-const PROJECT_ID_PROP: &str = "teamcity.project.id";
-const BUILD_BRANCH_IS_DEFAULT_PROP: &str = "teamcity.build.branch.is_default";
-const CACHE_REMOTE_URL_PROP: &str = "tc.cache.remote.url";
-const TEAMCITY_BUILD_PROPERTIES_FILE_ENV: &str = "TEAMCITY_BUILD_PROPERTIES_FILE";
+const TEAMCITY_VERSION: &str = "teamcity.version";
+const TEAMCITY_SERVER_URL: &str = "teamcity.serverUrl";
+const TEAMCITY_PROJECT_ID: &str = "teamcity.project.id";
+const TEAMCITY_BUILD_BRANCH_IS_DEFAULT: &str = "teamcity.build.branch.is_default";
+const TC_CACHE_REMOTE_URL: &str = "tc.cache.remote.url";
+const TEAMCITY_BUILD_PROPERTIES_FILE: &str = "TEAMCITY_BUILD_PROPERTIES_FILE";
+const TEAMCITY_CONFIGURATION_PROPERTIES_FILE: &str = "teamcity.configuration.properties.file";
 
 pub struct TeamCity {
     name: String,
@@ -23,16 +24,16 @@ pub struct TeamCity {
 
 impl TeamCity {
     pub fn is_available(env: &HashMap<String, String>) -> bool {
-        env.contains_key(TEAMCITY_BUILD_PROPERTIES_FILE_ENV)
+        env.contains_key(TEAMCITY_BUILD_PROPERTIES_FILE)
     }
 
     pub fn from_env(env: &HashMap<String, String>) -> Result<Self, Error> {
-        let props_path = match env.get(TEAMCITY_BUILD_PROPERTIES_FILE_ENV) {
+        let props_path = match env.get(TEAMCITY_BUILD_PROPERTIES_FILE) {
             Some(val) => val,
             None => {
                 let err = format!(
                     "Environment variable '{}' wasn't found",
-                    TEAMCITY_BUILD_PROPERTIES_FILE_ENV
+                    TEAMCITY_BUILD_PROPERTIES_FILE
                 );
                 return Err(Error::unrecognized_service(err));
             }
@@ -42,33 +43,25 @@ impl TeamCity {
         TeamCity::from_path(props_path)
     }
 
-    pub fn from_path<P>(props_file_path: P) -> Result<Self, Error>
+    pub fn from_path<P>(path: P) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
-        if !props_file_path.as_ref().exists() {
-            return Error::io_err(&props_file_path, "doesn't exists");
-        }
+        let props = Props::from_path(&path)?;
+        let version = props.key(TEAMCITY_VERSION)?;
+        let remote_url = props.key(TC_CACHE_REMOTE_URL).map(str::to_string)?;
 
-        let mut file = File::open(&props_file_path).io_err(&props_file_path)?;
-        let mut content = String::new();
+        let config_path = props.key(TEAMCITY_CONFIGURATION_PROPERTIES_FILE)?;
+        let props = Props::from_path(config_path)?;
 
-        file.read_to_string(&mut content).io_err(&props_file_path)?;
-
-        TeamCity::from_props(content.as_str())
-    }
-
-    pub fn from_props(props: &str) -> Result<Self, Error> {
-        let props = Props::from(props);
-        let version = props.key(TEAMCITY_VERSION_PROP)?;
-        let server_url = props.key(TEAMCITY_SERVER_URL_PROP)?;
-        let project_id = props.key(PROJECT_ID_PROP)?.to_string();
-        let remote_url = props.key(CACHE_REMOTE_URL_PROP).map(str::to_string)?;
+        let server_url = props.key(TEAMCITY_SERVER_URL)?;
+        let project_id = props.key(TEAMCITY_PROJECT_ID)?.to_string();
 
         let is_default_branch = props
-            .key(BUILD_BRANCH_IS_DEFAULT_PROP)
+            .key(TEAMCITY_BUILD_BRANCH_IS_DEFAULT)
             .map(|it| it == "true")
             .unwrap_or(false);
+
         let name = format!("{} at {}", version, server_url);
 
         Ok(TeamCity {
@@ -108,7 +101,23 @@ impl Service for TeamCity {
 struct Props(HashMap<String, String>);
 
 impl Props {
-    fn from(content: &str) -> Self {
+    fn from_path<P>(path: P) -> Result<Self, Error>
+    where
+        P: AsRef<Path>,
+    {
+        if !path.as_ref().exists() {
+            return Error::io_err(&path, "doesn't exists");
+        }
+
+        let mut file = File::open(&path).io_err(&path)?;
+        let mut content = String::new();
+
+        file.read_to_string(&mut content).io_err(&path)?;
+
+        Ok(Props::from_content(content.as_str()))
+    }
+
+    fn from_content(content: &str) -> Self {
         let props = content
             .lines()
             .filter_map(Props::parse)
@@ -142,7 +151,7 @@ impl Props {
         if let Some(idx) = line.find('=') {
             let key = line[0..idx].trim().to_string();
             let value = line[(idx + 1)..].trim().to_string();
-            let value = value.replace("\\:", ":");
+            let value = value.replace("\\:", ":").replace("\\=", "=");
 
             if key.is_empty() || value.is_empty() {
                 return None;
@@ -159,44 +168,60 @@ impl Props {
 mod tests {
     use super::*;
 
-    use crate::testing::TEAMCITY_BUILD_PROPS_PATH;
+    use crate::testing::{TEAMCITY_BUILD_PROPS_PATH, TEAMCITY_CONFIG_PROPS_PATH};
 
     #[test]
-    fn parse_props_file() {
-        let props = {
-            let mut file = File::open(TEAMCITY_BUILD_PROPS_PATH).unwrap();
-            let mut content = String::new();
+    fn parse_build_properties() {
+        let props = Props::from_path(TEAMCITY_BUILD_PROPS_PATH).unwrap();
 
-            file.read_to_string(&mut content).unwrap();
-            Props::from(content.as_str())
-        };
+        assert_eq!(props.key("foo").ok(), None);
 
         assert_eq!(
-            props.key(TEAMCITY_VERSION_PROP).unwrap(),
+            props.key(TEAMCITY_VERSION).unwrap(),
             "2018.1.3 (build 58658)",
             "{:?}",
             props
         );
+
         assert_eq!(
-            props.key(TEAMCITY_SERVER_URL_PROP).unwrap(),
+            props.key(TC_CACHE_REMOTE_URL).unwrap(),
+            "s3://teamcity/cache?region=eu-west-2",
+            "{:?}",
+            props
+        );
+
+        assert_eq!(
+            props.key(TEAMCITY_CONFIGURATION_PROPERTIES_FILE).unwrap(),
+            "tests/fixtures/teamcity/config.properties",
+            "{:?}",
+            props
+        );
+    }
+
+    #[test]
+    fn parse_configuration_properties() {
+        let props = Props::from_path(TEAMCITY_CONFIG_PROPS_PATH).unwrap();
+
+        assert_eq!(props.key("foo").ok(), None);
+
+        assert_eq!(
+            props.key(TEAMCITY_SERVER_URL).unwrap(),
             "http://localhost:8111",
             "{:?}",
             props
         );
         assert_eq!(
-            props.key(PROJECT_ID_PROP).unwrap(),
+            props.key(TEAMCITY_PROJECT_ID).unwrap(),
             "Github_Example_Example",
             "{:?}",
             props
         );
         assert_eq!(
-            props.key(BUILD_BRANCH_IS_DEFAULT_PROP).unwrap(),
+            props.key(TEAMCITY_BUILD_BRANCH_IS_DEFAULT).unwrap(),
             "true",
             "{:?}",
             props
         );
-
-        assert_eq!(props.key("foo").ok(), None);
     }
 
     #[test]
@@ -204,7 +229,7 @@ mod tests {
         let env = {
             let mut env = HashMap::new();
             env.insert(
-                TEAMCITY_BUILD_PROPERTIES_FILE_ENV.into(),
+                TEAMCITY_BUILD_PROPERTIES_FILE.into(),
                 TEAMCITY_BUILD_PROPS_PATH.into(),
             );
             TeamCity::from_env(&env).unwrap()
@@ -216,6 +241,6 @@ mod tests {
         );
         assert_eq!(env.project_id(), "Github_Example_Example");
         assert_eq!(env.is_uploadable(), true);
-        assert_eq!(env.remote_url(), "s3://bucket/prefix");
+        assert_eq!(env.remote_url(), "s3://teamcity/cache?region=eu-west-2");
     }
 }
