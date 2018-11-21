@@ -183,7 +183,7 @@ impl Display for Stats {
         }
 
         if !self.upload.is_empty() {
-            write!(f, "upload: {}; ", self.download.to_bytes_string())?;
+            write!(f, "upload: {}; ", self.upload.to_bytes_string())?;
         }
 
         Ok(())
