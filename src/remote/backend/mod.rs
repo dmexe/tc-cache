@@ -20,6 +20,6 @@ pub struct UploadRequest {
 }
 
 pub trait Backend: Debug {
-    fn download(&self, req: DownloadRequest) -> Result<(), Error>;
-    fn upload(&self, req: UploadRequest) -> Result<(), Error>;
+    fn download(&self, req: DownloadRequest) -> Result<usize, Error>;
+    fn upload(&self, req: UploadRequest) -> Result<usize, Error>;
 }

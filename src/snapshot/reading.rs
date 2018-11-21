@@ -117,10 +117,8 @@ impl Write for Null {
 mod tests {
     use super::*;
 
-    use std::fs::File;
     use std::path::Path;
 
-    use crate::errors::ResultExt;
     use crate::hashing;
     use crate::snapshot::{Entry, Writing};
     use crate::testing::{self, B_FILE_PATH};

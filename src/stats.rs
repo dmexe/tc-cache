@@ -115,6 +115,8 @@ pub struct Stats {
     packing: Counter,
     unpacking: Counter,
     walking: Counter,
+    download: Counter,
+    upload: Counter,
 }
 
 impl Stats {
@@ -142,6 +144,16 @@ impl Stats {
     pub fn walking(&self) -> &Counter {
         &self.walking
     }
+
+    #[inline]
+    pub fn download(&self) -> &Counter {
+        &self.download
+    }
+
+    #[inline]
+    pub fn upload(&self) -> &Counter {
+        &self.upload
+    }
 }
 
 impl Display for Stats {
@@ -164,6 +176,14 @@ impl Display for Stats {
 
         if !self.walking.is_empty() {
             write!(f, "walking: {}; ", self.walking.to_ops_string())?;
+        }
+
+        if !self.download.is_empty() {
+            write!(f, "download: {}; ", self.download.to_bytes_string())?;
+        }
+
+        if !self.upload.is_empty() {
+            write!(f, "upload: {}; ", self.download.to_bytes_string())?;
         }
 
         Ok(())

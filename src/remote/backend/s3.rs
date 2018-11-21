@@ -94,7 +94,7 @@ impl S3 {
 }
 
 impl Backend for S3 {
-    fn download(&self, req: DownloadRequest) -> Result<(), Error> {
+    fn download(&self, req: DownloadRequest) -> Result<usize, Error> {
         let client = S3Client::new(self.region.clone());
         let path = &req.path.as_path();
 
@@ -128,10 +128,10 @@ impl Backend for S3 {
             .collect()
             .wait()?;
 
-        Ok(())
+        Ok(content_len)
     }
 
-    fn upload(&self, req: UploadRequest) -> Result<(), Error> {
+    fn upload(&self, req: UploadRequest) -> Result<usize, Error> {
         let client = S3Client::new(self.region.clone());
         let key = self.prefixed(&req.key);
 
@@ -150,7 +150,7 @@ impl Backend for S3 {
             .upload_id
             .ok_or_else(|| Error::remote("upload_id cannot be empty"))?;
 
-        let (_, _, src) = mmap::read(&req.path, None)?;
+        let (_, len, src) = mmap::read(&req.path, None)?;
 
         let parts = src
             .chunks(CHUNK_SIZE)
@@ -194,7 +194,19 @@ impl Backend for S3 {
             .map_err(Error::remote)
             .sync()?;
 
-        Ok(())
+        Ok(len)
+    }
+}
+
+impl ToString for S3 {
+    fn to_string(&self) -> String {
+        let mut buf = format!("s3://{}", self.bucket_name);
+
+        if let Some(prefix) = &self.key_prefix {
+            buf = format!("{}/{}", buf, prefix);
+        };
+
+        format!("{}?region={}", buf, self.region.name())
     }
 }
 
@@ -235,35 +247,20 @@ mod tests {
             let actual = S3::from(&uri).unwrap();
             assert!(
                 actual.to_string().starts_with(expected),
-                format!("Expect that '{}' starts with '{}'", actual, expected)
+                format!(
+                    "Expect that '{}' starts with '{}'",
+                    actual.to_string(),
+                    expected
+                )
             );
         }
     }
 
     #[test]
-    fn parse_err() {
-        #[rustfmt::skip]
-        let params = vec! {
-            "http://example.com"
-        };
-
-        for uri in params {
-            let uri = Url::parse(uri).unwrap();
-            match S3::from(&uri) {
-                Err(_) => {}
-                Ok(ok) => unreachable!("{:?}", ok),
-            }
-        }
-    }
-
-    #[test]
     fn upload() {
-        env::set_var("AWS_ACCESS_KEY_ID", "accessKey");
-        env::set_var("AWS_SECRET_ACCESS_KEY", "secretKey");
-
+        let endpoint = env::var("S3_ENDPOINT").unwrap_or("http://localhost:9000".into());
         let uri = Url::parse("s3://bucket/prefix").unwrap();
-        let s3 = S3::from(&uri).unwrap().endpoint("http://127.0.0.1:9000");
-        let s3 = s3.key("projectId");
+        let s3 = S3::from(&uri).unwrap().endpoint(endpoint);
         let len = { File::open(&B_FILE_PATH).unwrap().metadata().unwrap().len() as usize };
         let dst = temp_file(".s3");
 
@@ -271,7 +268,6 @@ mod tests {
             path: B_FILE_PATH.into(),
             len,
             key: "file".into(),
-            ..Default::default()
         };
 
         s3.upload(upload).unwrap();

@@ -41,27 +41,31 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
 
     info!("{}", service);
 
-    cfg.remote(remote);
-
     if let Some(pull) = app.subcommand_matches(PULL_COMMAND) {
+        cfg.remote(remote);
+
         let directories = pull.values_of(DIRECTORY_ARG).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
         let prefix = pull.value_of("prefix").map(PathBuf::from);
         let pull = Pull::new(&cfg, directories, prefix);
 
-        pull.run()?;
+        return pull.run();
     };
 
     if let Some(_push) = app.subcommand_matches(PUSH_COMMAND) {
+        if service.is_uploadable() {
+            cfg.remote(remote);
+        }
+
         let push = Push::new(&cfg);
 
         let (_, len) = push.run()?;
         if let Some(len) = len {
             info!("Snapshot size - {}", pretty::bytes(len));
         }
-    }
 
-    info!("{}", Stats::current());
+        return Ok(());
+    }
 
     Ok(())
 }
@@ -113,5 +117,7 @@ fn main() {
 
     if let Err(err) = run(&app) {
         error!("{}", err);
+    } else {
+        info!("{}", Stats::current());
     }
 }

@@ -95,9 +95,6 @@ impl<W: Write> Writing<W> {
 mod tests {
     use super::*;
 
-    use std::fs::File;
-
-    use crate::errors::ResultExt;
     use crate::snapshot::Entry;
     use crate::testing::{self, B_FILE_PATH};
 

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use url::Url;
 
-use crate::Error;
+use crate::{Error, Stats};
 
 mod backend;
 mod futures_ext;
@@ -51,6 +51,7 @@ impl Remote {
     where
         P: AsRef<Path>,
     {
+        let _timer = Stats::current().download();
         let file_name = file_name(&path)?;
         let file_name = self.prefixed(file_name);
 
@@ -59,23 +60,30 @@ impl Remote {
             key: file_name,
         };
 
-        self.backend.download(req)
+        let len = self.backend.download(req)?;
+        Stats::current().download().inc(len);
+
+        Ok(())
     }
 
     pub fn upload<P>(&self, path: P, len: usize) -> Result<(), Error>
     where
         P: AsRef<Path>,
     {
+        let _timer = Stats::current().upload();
         let file_name = file_name(&path)?;
         let file_name = self.prefixed(file_name);
 
         let req = backend::UploadRequest {
             path: path.as_ref().to_path_buf(),
             key: file_name,
-            len: len,
+            len,
         };
 
-        self.backend.upload(req)
+        let len = self.backend.upload(req)?;
+        Stats::current().upload().inc(len);
+
+        Ok(())
     }
 
     fn prefixed<S>(&self, key: S) -> String
