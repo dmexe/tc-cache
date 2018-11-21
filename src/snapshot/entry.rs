@@ -313,7 +313,7 @@ mod tests {
     fn walk_directory() {
         use super::EntryKind::*;
 
-        let dirs = vec![FIXTURES_PATH];
+        let dirs = vec![FIXTURES_PATH, IS_DIR_PATH];
         let mut actual = Entry::walk_into_vec(&dirs)
             .unwrap()
             .iter()
@@ -333,6 +333,8 @@ mod tests {
             (File,    "0cc175b9c0f1b6a831c399e269772661".into(), "tests/fixtures/snapshot/a.txt".into()),
             (File,    "54510be579370aa078fbb9c5d9eed53a".into(), "tests/fixtures/snapshot/b.txt".into()),
             (Dir,     "".into(),                                 "tests/fixtures/snapshot/is_dir".into()),
+            (Dir,     "".into(),                                 "tests/fixtures/snapshot/is_dir".into()),
+            (File,    "d41d8cd98f00b204e9800998ecf8427e".into(), "tests/fixtures/snapshot/is_dir/.keep".into()),
             (File,    "d41d8cd98f00b204e9800998ecf8427e".into(), "tests/fixtures/snapshot/is_dir/.keep".into()),
             (Symlink, "".into(),                                 "tests/fixtures/snapshot/is_symlink".into())
         };
