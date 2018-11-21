@@ -8,7 +8,7 @@ use std::os::unix::fs::MetadataExt as UnixMetadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use log::error;
+use log::{error, debug};
 use rayon::prelude::ParallelIterator;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
@@ -115,33 +115,41 @@ impl Entry {
         }
     }
 
-    pub fn walk<P>(path: P) -> impl ParallelIterator<Item = Result<Entry, Error>>
+    pub fn walk<P>(dirs: &[P]) -> impl ParallelIterator<Item = Result<Entry, Error>>
     where
         P: AsRef<Path>,
     {
         use rayon::prelude::*;
 
-        let walker = WalkDir::new(&path).follow_links(false).max_open(256);
-
+        let dirs: Vec<PathBuf> = dirs.iter().map(|it| it.as_ref().to_path_buf()).collect();
         let (tx, rx) = mpsc::channel();
-        let path = path.as_ref().to_path_buf();
 
         rayon::spawn(move || {
-            for it in walker {
-                Stats::current().walking().inc(1);
+            for dir in dirs {
+                let walker = WalkDir::new(&dir).follow_links(false).max_open(256);
+                
+                for item in walker {
+                    debug!("walk {:?}", item);
+                    Stats::current().walking().inc(1);
 
-                let it = it.map(DirEntry::into_path);
+                    let is_err = item.is_err();
+                    let item = item.map(DirEntry::into_path).io_err(&dir);
 
-                if tx.send(it).is_err() {
-                    error!("Cannot send entry into channel (is consumer dead?), exiting");
-                    return;
+                    if tx.send(item).is_err() {
+                        error!("Cannot send entry into channel (is consumer dead?), exiting");
+                        return;
+                    }
+                    
+                    if is_err {
+                        return;
+                    }
                 }
             }
         });
 
         rx.into_iter()
             .par_bridge()
-            .map(move |it| it.io_err(&path).and_then(Entry::try_from_path))
+            .map(move |it| it.and_then(Entry::try_from_path))
     }
 
     pub fn walk_into_vec<P>(dirs: &[P]) -> Result<Vec<Entry>, Error>
@@ -154,6 +162,7 @@ impl Entry {
         type Item = Result<Entry, Error>;
 
         let folder = |mut memo: Memo, item: Item| {
+            debug!("fold {:?}", item);
             let item = item?;
             memo.push(item);
             Ok(memo)
@@ -164,11 +173,7 @@ impl Entry {
             Ok(memo)
         };
 
-        let dirs: Vec<&Path> = dirs.iter().map(|it| it.as_ref()).collect();
-
-        let mut entries: Memo = dirs
-            .into_par_iter()
-            .flat_map(Entry::walk)
+        let mut entries: Memo = Entry::walk(dirs)
             .try_fold(Vec::new, folder)
             .try_reduce(Vec::new, reducer)?;
 
