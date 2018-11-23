@@ -21,7 +21,7 @@ impl<'a, 'b> Pull<'a, 'b> {
     pub fn new<P1, P2>(
         cfg: &'a Config,
         storage: &'b Storage,
-        cached_dirs: Vec<P1>,
+        cached_dirs: &[P1],
         unpack_prefix: Option<P2>,
     ) -> Self
     where
@@ -135,7 +135,7 @@ mod tests {
 
         let cfg = Config::from(work.as_ref()).unwrap();
         let storage = Storage::new(&cfg);
-        let command = Pull::new(&cfg, &storage, dirs, Some(dst));
+        let command = Pull::new(&cfg, &storage, &dirs, Some(dst));
 
         command.run().unwrap();
     }

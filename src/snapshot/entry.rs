@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use std::fs;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::os::unix::fs::MetadataExt as UnixMetadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -16,7 +17,7 @@ use walkdir::{DirEntry, WalkDir};
 use crate::errors::ResultExt;
 use crate::{hashing, Error, Stats};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Hash, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq)]
 pub struct Attributes {
     pub mode: u32,
     pub atime: i64,
@@ -32,6 +33,13 @@ impl Attributes {
 impl<T: UnixMetadata> From<T> for Attributes {
     fn from(metadata: T) -> Self {
         Attributes::new(metadata.mode(), metadata.atime(), metadata.mtime())
+    }
+}
+
+impl Hash for Attributes {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u32(self.mode)
     }
 }
 

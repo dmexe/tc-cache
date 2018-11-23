@@ -139,7 +139,7 @@ mod tests {
         let storage = Storage::new(&cfg);
 
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
-        let pull = Pull::new(&cfg, &storage, dirs.clone(), Some(dst));
+        let pull = Pull::new(&cfg, &storage, &dirs, Some(dst));
         let push = Push::new(&cfg, &storage);
 
         pull.run().unwrap();

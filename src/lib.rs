@@ -10,7 +10,7 @@ mod config;
 mod errors;
 mod hashing;
 mod mmap;
-pub mod pretty;
+mod pretty;
 mod services;
 mod snapshot;
 mod stats;

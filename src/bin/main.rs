@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{pretty, Config, Error, Pull, Push, Service, Stats, Storage, TeamCity};
+use tc_cache::{Config, Error, Pull, Push, Service, Stats, Storage, TeamCity};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
@@ -15,7 +15,7 @@ const TEAMCITY_PROPS_FILE: &str = "teamcity-props-file";
 const VERBOSE: &str = "verbose";
 const KEY: &str = "key";
 
-fn new_service(cfg: &Config, args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
+fn new_service(args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
     let mut service: Option<Box<dyn Service>> = None;
 
     if let Some(path) = args.value_of(TEAMCITY_PROPS_FILE) {
@@ -55,21 +55,20 @@ fn run(args: &ArgMatches) -> Result<(), Error> {
     let cfg = new_config(&args)?;
 
     if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
-        let service = new_service(&cfg, &args)?;
-        let mut storage = Storage::new(&cfg);
-
-        storage.uri(service.remote_url())?;
-        storage.key_prefix(service.project_id());
-        storage.uploadable(service.is_uploadable());
+        let service = new_service(&args)?;
+        let mut storage = Storage::new(&cfg)
+            .uri(service.remote_url())?
+            .key_prefix(service.project_id())
+            .uploadable(service.is_uploadable());
 
         if let Some(key_prefix) = args.value_of(KEY) {
-            storage.key_prefix(key_prefix);
+            storage = storage.key_prefix(key_prefix);
         }
 
         let directories = pull.values_of(DIRECTORY).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
         let prefix = pull.value_of("prefix").map(PathBuf::from);
-        let pull = Pull::new(&cfg, &storage, directories, prefix);
+        let pull = Pull::new(&cfg, &storage, &directories, prefix);
 
         return pull.run();
     };
@@ -105,7 +104,7 @@ fn main() {
         .arg(
             Arg::with_name(KEY)
                 .long("key")
-                .short("p")
+                .short("k")
                 .value_name("text")
                 .help("Cache key prefix"),
         )

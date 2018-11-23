@@ -27,7 +27,7 @@ impl Storage {
         }
     }
 
-    pub fn uri<S>(&mut self, uri: S) -> Result<(), Error>
+    pub fn uri<S>(self, uri: S) -> Result<Self, Error>
     where
         S: AsRef<str>,
     {
@@ -35,16 +35,21 @@ impl Storage {
 
         if uri.scheme() == backend::S3::scheme() {
             let s3 = backend::S3::from(&uri)?;
-            self.backend = Some(Box::new(s3));
-            self.uri = Some(uri.as_ref().to_string());
-            return Ok(());
+            let backend: Option<Box<dyn backend::Backend>> = Some(Box::new(s3));
+            let uri = Some(uri.as_ref().to_string());
+
+            return Ok(Storage {
+                backend,
+                uri,
+                ..self
+            });
         }
 
         let err = format!("Unknown remote uri '{}'", uri);
         Err(Error::storage(err))
     }
 
-    pub fn key_prefix<S>(&mut self, key: S)
+    pub fn key_prefix<S>(self, key: S) -> Self
     where
         S: AsRef<str>,
     {
@@ -53,11 +58,14 @@ impl Storage {
             None => key.as_ref().to_string(),
         };
 
-        self.key_prefix = Some(key_prefix);
+        Storage {
+            key_prefix: Some(key_prefix),
+            ..self
+        }
     }
 
-    pub fn uploadable(&mut self, uploadable: bool) {
-        self.uploadable = uploadable;
+    pub fn uploadable(self, uploadable: bool) -> Self {
+        Storage { uploadable, ..self }
     }
 
     pub fn is_uploadable(&self) -> bool {
@@ -165,15 +173,15 @@ impl Storage {
         };
 
         if let Some(uri) = obj.get("uri").and_then(|it| it.as_str()) {
-            storage.uri(&uri)?;
+            storage = storage.uri(&uri)?;
         }
 
         if let Some(key_prefix) = obj.get("key_prefix").and_then(|it| it.as_str()) {
-            storage.key_prefix(&key_prefix);
+            storage = storage.key_prefix(&key_prefix);
         }
 
         if let Some(uploadable) = obj.get("uploadable").and_then(|it| it.as_bool()) {
-            storage.uploadable(uploadable);
+            storage = storage.uploadable(uploadable);
         }
 
         Ok(storage)
@@ -208,7 +216,7 @@ mod tests {
 
         assert_eq!(storage.key_prefixed("foo"), "foo");
 
-        storage.key_prefix("bar");
+        storage = storage.key_prefix("bar");
 
         assert_eq!(storage.key_prefixed("foo"), "bar/foo");
     }
@@ -217,10 +225,11 @@ mod tests {
     fn save() {
         let work = testing::temp_dir();
         let cfg = Config::from(work.as_ref()).unwrap();
-        let mut storage = Storage::new(&cfg);
+        let storage = Storage::new(&cfg)
+            .uri("s3://bucket/prefix")
+            .unwrap()
+            .key_prefix("prefix");
 
-        storage.uri("s3://bucket/prefix").unwrap();
-        storage.key_prefix("prefix");
         storage.save().unwrap();
 
         let _storage = Storage::load(cfg.storage_file).unwrap();
