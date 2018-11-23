@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::errors::ResultExt;
-use crate::{Error, Remote};
+use crate::Error;
 
 const WORK_DIR: &str = ".tc-cache";
 
@@ -13,7 +13,6 @@ pub struct Config {
     pub cached_dirs_file: PathBuf,
     pub cached_entries_file: PathBuf,
     pub snapshot_file: PathBuf,
-    pub remote: Option<Remote>,
     pub verbose: bool,
 }
 
@@ -50,17 +49,12 @@ impl Config {
             cached_dirs_file,
             cached_entries_file,
             snapshot_file,
-            remote: None,
             verbose: false,
         })
     }
 
     pub fn snapshot_file_name() -> &'static str {
         "snapshot.snappy"
-    }
-
-    pub fn remote(&mut self, remote: Remote) {
-        self.remote = Some(remote);
     }
 
     pub fn verbose(&mut self, verbose: bool) {

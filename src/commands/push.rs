@@ -6,19 +6,20 @@ use log::{error, info, warn};
 
 use crate::errors::ResultExt;
 use crate::snapshot::{self, Diff, Entry, Pack, Writing};
-use crate::{mmap, Config, Error, Stats};
+use crate::{mmap, Config, Error, Stats, Remote};
 
-pub struct Push<'a> {
+pub struct Push<'a, 'b> {
     cfg: &'a Config,
+    remote: &'b Remote,
 }
 
-impl<'a> Push<'a> {
-    pub fn new(cfg: &'a Config) -> Self {
-        Push { cfg }
+impl<'a, 'b> Push<'a, 'b> {
+    pub fn new(cfg: &'a Config, remote: &'b Remote) -> Self {
+        Push { cfg, remote }
     }
 
     pub fn run(self) -> Result<(Vec<PathBuf>, Option<usize>), Error> {
-        let Self { cfg } = self;
+        let Self { cfg, remote } = self;
         let mut changed = true;
 
         let cached_dirs = read_cached_dirs(&cfg.cached_dirs_file)?;
@@ -55,7 +56,7 @@ impl<'a> Push<'a> {
         let meta = &cfg.snapshot_file.metadata().io_err(&cfg.snapshot_file)?;
         let len = meta.len() as usize;
 
-        if let Some(ref remote) = cfg.remote {
+        if !remote.is_empty() {
             info!("Attempting to upload snapshot ...");
 
             if let Err(err) = remote.upload(&cfg.snapshot_file, len) {
@@ -129,17 +130,15 @@ mod tests {
 
     #[test]
     fn push() {
-        env_logger::init();
-
         let work = testing::temp_dir();
         let dst = testing::temp_dir();
 
-        let mut cfg = Config::from(&work).unwrap();
-        cfg.verbose(true);
+        let cfg = Config::from(&work).unwrap();
+        let remote = Remote::new(&cfg);
 
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
-        let pull = Pull::new(&cfg, dirs.clone(), Some(dst));
-        let push = Push::new(&cfg);
+        let pull = Pull::new(&cfg, &remote, dirs.clone(), Some(dst));
+        let push = Push::new(&cfg, &remote);
 
         pull.run().unwrap();
 

@@ -7,23 +7,30 @@ use serde_json;
 
 use crate::errors::ResultExt;
 use crate::snapshot::{Reading, Unpack};
-use crate::{Config, Error, Stats};
+use crate::{Config, Error, Stats, Remote};
 
 #[derive(Debug)]
-pub struct Pull<'a> {
+pub struct Pull<'a, 'b> {
     cfg: &'a Config,
+    remote: &'b Remote,
     cached_dirs: Vec<PathBuf>,
     unpack_prefix: Option<PathBuf>,
 }
 
-impl<'a> Pull<'a> {
-    pub fn new<P>(cfg: &'a Config, cached_dirs: Vec<PathBuf>, unpack_prefix: Option<P>) -> Self
+impl<'a, 'b> Pull<'a, 'b> {
+    pub fn new<P1, P2>(
+        cfg: &'a Config, 
+        remote: &'b Remote,
+        cached_dirs: Vec<P1>, 
+        unpack_prefix: Option<P2>) -> Self
     where
-        P: AsRef<Path>,
+        P1: AsRef<Path>,
+        P2: AsRef<Path>,
     {
         Pull {
             cfg,
-            cached_dirs,
+            remote,
+            cached_dirs: cached_dirs.iter().map(|it| it.as_ref().to_path_buf()).collect(),
             unpack_prefix: unpack_prefix.map(|it| it.as_ref().to_path_buf()),
         }
     }
@@ -31,11 +38,12 @@ impl<'a> Pull<'a> {
     pub fn run(self) -> Result<(), Error> {
         let Self {
             cfg,
+            remote,
             cached_dirs,
             unpack_prefix,
         } = self;
 
-        if let Some(ref remote) = cfg.remote {
+        if !remote.is_empty() {
             info!("Attempting to download snapshot ...");
 
             if let Err(err) = remote.download(&cfg.snapshot_file) {
@@ -122,7 +130,8 @@ mod tests {
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
 
         let cfg = Config::from(work.as_ref()).unwrap();
-        let command = Pull::new(&cfg, dirs, Some(dst));
+        let remote = Remote::new(&cfg);
+        let command = Pull::new(&cfg, &remote, dirs, Some(dst));
 
         command.run().unwrap();
     }

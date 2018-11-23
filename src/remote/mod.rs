@@ -2,19 +2,26 @@ use std::path::Path;
 
 use url::Url;
 
-use crate::{Error, Stats};
+use crate::{Error, Stats, Config};
 
 mod backend;
 mod futures_ext;
 
 #[derive(Debug)]
 pub struct Remote {
-    backend: Box<dyn backend::Backend>,
+    backend: Option<Box<dyn backend::Backend>>,
     key_prefix: Option<String>,
 }
 
 impl Remote {
-    pub fn from<S>(uri: S) -> Result<Self, Error>
+    pub fn new(_cfg: &Config) -> Self {
+        Self {
+            backend: None,
+            key_prefix: None
+        }
+    }
+    
+    pub fn uri<S>(&mut self, uri: S) -> Result<Self, Error>
     where
         S: AsRef<str>,
     {
@@ -22,17 +29,14 @@ impl Remote {
 
         if uri.scheme() == backend::S3::scheme() {
             let s3 = backend::S3::from(&uri)?;
-            return Ok(Remote {
-                backend: Box::new(s3),
-                key_prefix: None,
-            });
+            self.backend = Some(Box::new(s3))
         }
 
         let err = format!("Unknown remote uri '{}'", uri);
         Err(Error::remote(err))
     }
 
-    pub fn prefix<S>(self, key: S) -> Self
+    pub fn prefix<S>(&mut self, key: S)
     where
         S: AsRef<str>,
     {
@@ -40,17 +44,23 @@ impl Remote {
             Some(val) => format!("{}/{}", val, key.as_ref()),
             None => key.as_ref().to_string(),
         };
-
-        Self {
-            key_prefix: Some(key_prefix),
-            ..self
-        }
+        
+        self.key_prefix = Some(key_prefix);
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.backend.is_none()
     }
 
     pub fn download<P>(&self, path: P) -> Result<(), Error>
     where
         P: AsRef<Path>,
     {
+        let inner = match &self.backend {
+            Some(val) => val,
+            None => return Ok(())
+        };
+        
         let _timer = Stats::current().download();
         let file_name = file_name(&path)?;
         let file_name = self.prefixed(file_name);
@@ -60,7 +70,7 @@ impl Remote {
             key: file_name,
         };
 
-        let len = self.backend.download(req)?;
+        let len = inner.download(req)?;
         Stats::current().download().inc(len);
 
         Ok(())
@@ -70,6 +80,11 @@ impl Remote {
     where
         P: AsRef<Path>,
     {
+        let inner = match &self.backend {
+            Some(val) => val,
+            None => return Ok(())
+        };
+        
         let _timer = Stats::current().upload();
         let file_name = file_name(&path)?;
         let file_name = self.prefixed(file_name);
@@ -80,7 +95,7 @@ impl Remote {
             len,
         };
 
-        let len = self.backend.upload(req)?;
+        let len = inner.upload(req)?;
         Stats::current().upload().inc(len);
 
         Ok(())

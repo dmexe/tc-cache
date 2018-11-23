@@ -14,23 +14,12 @@ const DIRECTORY_ARG: &str = "directory";
 const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
 const VERBOSE: &str = "verbose";
 
-fn run(app: &ArgMatches) -> Result<(), Error> {
-    env_logger::init();
-
-    let mut cfg = app
-        .value_of(HOME_ARG)
-        .map(Config::from)
-        .unwrap_or_else(Config::from_env)?;
-
+fn new_service(cfg: &Config, args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
     let mut service: Option<Box<dyn Service>> = None;
 
-    if let Some(path) = app.value_of(TEAMCITY_PROPS_FILE_ARG) {
+    if let Some(path) = args.value_of(TEAMCITY_PROPS_FILE_ARG) {
         let teamcity = TeamCity::from_path(path)?;
         service = Some(teamcity.into_box());
-    }
-
-    if app.is_present(VERBOSE) {
-        cfg.verbose(true);
     }
 
     let service = match service {
@@ -41,28 +30,52 @@ fn run(app: &ArgMatches) -> Result<(), Error> {
         }
     };
 
-    let remote = Remote::from(service.remote_url())?;
-    let remote = remote.prefix(service.project_id());
-
     info!("{}", service);
 
-    if let Some(pull) = app.subcommand_matches(PULL_COMMAND) {
-        cfg.remote(remote);
+    Ok(service)
+}
 
+fn new_config(args: &ArgMatches) -> Result<Config, Error> {
+    let mut cfg = args
+        .value_of(HOME_ARG)
+        .map(Config::from)
+        .unwrap_or_else(Config::from_env)?;
+
+    if args.is_present(VERBOSE) {
+        cfg.verbose(true);
+    }
+    
+    Ok(cfg)
+}
+
+fn run(args: &ArgMatches) -> Result<(), Error> {
+    env_logger::init();
+
+    let cfg = new_config(&args)?;
+    let service = new_service(&cfg, &args)?;
+    let mut remote = Remote::new(&cfg);
+
+    if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
+        if service.is_uploadable() {
+            remote.uri(service.remote_url())?;
+            remote.prefix(service.project_id());
+        }
+        
         let directories = pull.values_of(DIRECTORY_ARG).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
         let prefix = pull.value_of("prefix").map(PathBuf::from);
-        let pull = Pull::new(&cfg, directories, prefix);
+        let pull = Pull::new(&cfg, &remote, directories, prefix);
 
         return pull.run();
     };
 
-    if let Some(_push) = app.subcommand_matches(PUSH_COMMAND) {
+    if let Some(_push) = args.subcommand_matches(PUSH_COMMAND) {
         if service.is_uploadable() {
-            cfg.remote(remote);
+            remote.uri(service.remote_url())?;
+            remote.prefix(service.project_id());
         }
 
-        let push = Push::new(&cfg);
+        let push = Push::new(&cfg, &remote);
 
         let (_, len) = push.run()?;
         if let Some(len) = len {
