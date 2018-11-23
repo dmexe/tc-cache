@@ -23,8 +23,10 @@ services:
       - "/app/scripts/nigthly_musl/build.sh"
     volumes:
       - "./:/app"
+      - "/cargo"
     environment:
       AWS_ACCESS_KEY_ID: "accessKey"
       AWS_SECRET_ACCESS_KEY: "secretKey"
       S3_ENDPOINT: "http://minio:9000"
+      CARGO_HOME: "/cargo"
     working_dir: "/app"
