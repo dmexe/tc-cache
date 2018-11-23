@@ -48,8 +48,6 @@ impl<'a, 'b> Pull<'a, 'b> {
         } = self;
 
         if storage.is_downloable() {
-            info!("Attempting to download snapshot ...");
-
             if let Err(err) = storage.download(&cfg.snapshot_file) {
                 if cfg.verbose {
                     error!("{:?}", err);

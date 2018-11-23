@@ -57,8 +57,6 @@ impl<'a, 'b> Push<'a, 'b> {
         let len = meta.len() as usize;
 
         if storage.is_uploadable() {
-            info!("Attempting to upload snapshot ...");
-
             if let Err(err) = storage.upload(&cfg.snapshot_file, len) {
                 if cfg.verbose {
                     error!("{:?}", err);
@@ -67,8 +65,6 @@ impl<'a, 'b> Push<'a, 'b> {
                 }
             }
         }
-
-        info!("Snapshot size - {}", pretty::bytes(len));
 
         Ok((cached_dirs, Some(len)))
     }

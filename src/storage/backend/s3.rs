@@ -4,11 +4,13 @@ use std::string::ToString;
 
 use futures::stream::{iter_ok, Stream};
 use futures::Future;
+use log::info;
 use rusoto_core::Region;
 use rusoto_s3::{self as s3_api, S3Client, S3 as S3Api};
 use url::{Host, Url};
 
 use crate::errors::ResultExt;
+use crate::pretty;
 use crate::storage::backend::{Backend, DownloadRequest, UploadRequest};
 use crate::storage::futures_ext::FuturesExt;
 use crate::{mmap, Error};
@@ -98,10 +100,16 @@ impl Backend for S3 {
     fn download(&self, req: DownloadRequest) -> Result<usize, Error> {
         let client = S3Client::new(self.region.clone());
         let path = &req.path.as_path();
+        let key = self.key_prefixed(&req.key);
+
+        info!(
+            "Attempting to download archive from s3://{}/{}",
+            self.bucket_name, key
+        );
 
         let get_object = s3_api::GetObjectRequest {
             bucket: self.bucket_name.clone(),
-            key: self.key_prefixed(&req.key),
+            key: key.clone(),
             ..Default::default()
         };
 
@@ -129,12 +137,19 @@ impl Backend for S3 {
             .collect()
             .wait()?;
 
+        info!("Archive downloaded: {}", pretty::bytes(len));
+
         Ok(content_len)
     }
 
     fn upload(&self, req: UploadRequest) -> Result<usize, Error> {
         let client = S3Client::new(self.region.clone());
         let key = self.key_prefixed(&req.key);
+
+        info!(
+            "Attempting to upload archive to s3://{}/{}",
+            self.bucket_name, key
+        );
 
         let upload = s3_api::CreateMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
@@ -194,6 +209,8 @@ impl Backend for S3 {
             .complete_multipart_upload(complete)
             .map_err(Error::storage)
             .sync()?;
+
+        info!("Archive uploaded: {}", pretty::bytes(len));
 
         Ok(len)
     }

@@ -19,14 +19,8 @@ services:
   nightly_musl:
     build:
       context: scripts/nigthly_musl
-    command: |
-      bash -ex -c '
-      cargo fetch                                     &&
-      cargo build $${CARGO_ARGS} --tests              &&
-      cargo test $${CARGO_ARGS} -- --nocapture        &&
-      cargo build $${CARGO_ARGS} --bin main --release &&
-      upx target/$${TARGET}/release/main              &&
-      true'
+    command: 
+      - "./scripts/nigthly_musl/build.sh"
     volumes:
       - "./:/app"
     environment:
