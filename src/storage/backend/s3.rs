@@ -137,7 +137,7 @@ impl Backend for S3 {
             .collect()
             .wait()?;
 
-        info!("Archive downloaded: {}", pretty::bytes(len));
+        info!("Archive downloaded: {}", pretty::bytes(content_len));
 
         Ok(content_len)
     }

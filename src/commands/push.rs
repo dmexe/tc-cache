@@ -6,7 +6,7 @@ use log::{error, info, warn};
 
 use crate::errors::ResultExt;
 use crate::snapshot::{self, Diff, Entry, Pack, Writing};
-use crate::{mmap, pretty, Config, Error, Stats, Storage};
+use crate::{mmap, Config, Error, Stats, Storage};
 
 pub struct Push<'a, 'b> {
     cfg: &'a Config,
