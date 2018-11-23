@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{Config, Error, Pull, Push, Service, Stats, Storage, TeamCity};
+use tc_cache::{Config, Error, Pull, Push, Service, ServiceFactory, Stats, Storage};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
@@ -16,23 +16,9 @@ const VERBOSE: &str = "verbose";
 const KEY: &str = "key";
 
 fn new_service(args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
-    let mut service: Option<Box<dyn Service>> = None;
-
-    if let Some(path) = args.value_of(TEAMCITY_PROPS_FILE) {
-        let teamcity = TeamCity::from_path(path)?;
-        service = Some(teamcity.into_box());
-    }
-
-    let service = match service {
-        Some(svc) => svc,
-        None => {
-            let env = env::vars().collect();
-            TeamCity::from_env(&env)?.into_box()
-        }
-    };
-
+    let env = env::vars().collect();
+    let service = ServiceFactory::from_env(&env, args.value_of(TEAMCITY_PROPS_FILE))?;
     info!("{}", service);
-
     Ok(service)
 }
 
@@ -49,6 +35,15 @@ fn new_config(args: &ArgMatches) -> Result<Config, Error> {
     Ok(cfg)
 }
 
+fn new_storage(cfg: &Config, service: &Box<dyn Service>) -> Result<Storage, Error> {
+    let storage = Storage::new(&cfg)
+        .uri(service.remote_url())?
+        .key_prefix(service.project_id())
+        .uploadable(service.is_uploadable());
+
+    Ok(storage)
+}
+
 fn run(args: &ArgMatches) -> Result<(), Error> {
     env_logger::init();
 
@@ -56,10 +51,7 @@ fn run(args: &ArgMatches) -> Result<(), Error> {
 
     if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
         let service = new_service(&args)?;
-        let mut storage = Storage::new(&cfg)
-            .uri(service.remote_url())?
-            .key_prefix(service.project_id())
-            .uploadable(service.is_uploadable());
+        let mut storage = new_storage(&cfg, &service)?;
 
         if let Some(key_prefix) = args.value_of(KEY) {
             storage = storage.key_prefix(key_prefix);

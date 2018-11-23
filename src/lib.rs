@@ -22,6 +22,6 @@ mod testing;
 pub use self::commands::{Pull, Push};
 pub use self::config::Config;
 pub use self::errors::{Error, ErrorKind};
-pub use self::services::{Service, TeamCity};
+pub use self::services::{Service, ServiceFactory};
 pub use self::stats::Stats;
 pub use self::storage::Storage;

@@ -23,6 +23,7 @@ pub struct TeamCity {
 }
 
 impl TeamCity {
+    #[inline]
     pub fn is_available(env: &HashMap<String, String>) -> bool {
         env.contains_key(TEAMCITY_BUILD_PROPERTIES_FILE)
     }
@@ -80,18 +81,22 @@ impl Display for TeamCity {
 }
 
 impl Service for TeamCity {
+    #[inline]
     fn project_id(&self) -> &str {
         self.project_id.as_str()
     }
 
+    #[inline]
     fn is_uploadable(&self) -> bool {
         self.is_default_branch
     }
 
+    #[inline]
     fn remote_url(&self) -> &str {
         self.remote_url.as_str()
     }
 
+    #[inline]
     fn into_box(self) -> Box<dyn Service> {
         Box::new(self)
     }
