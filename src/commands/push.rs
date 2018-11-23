@@ -60,7 +60,11 @@ impl<'a, 'b> Push<'a, 'b> {
             info!("Attempting to upload snapshot ...");
 
             if let Err(err) = storage.upload(&cfg.snapshot_file, len) {
-                error!("{}", err);
+                if cfg.verbose {
+                    error!("{:?}", err);
+                } else {
+                    error!("{}", err);
+                }
             }
         }
 

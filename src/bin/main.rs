@@ -35,12 +35,21 @@ fn new_config(args: &ArgMatches) -> Result<Config, Error> {
     Ok(cfg)
 }
 
-fn new_storage(cfg: &Config, service: &Box<dyn Service>) -> Result<Storage, Error> {
-    let storage = Storage::new(&cfg)
+fn new_storage(
+    cfg: &Config,
+    service: &Box<dyn Service>,
+    args: &ArgMatches,
+) -> Result<Storage, Error> {
+    let mut storage = Storage::new(&cfg)
         .uri(service.remote_url())?
         .key_prefix(service.project_id())
         .uploadable(service.is_uploadable());
 
+    if let Some(key_prefix) = args.value_of(KEY) {
+        storage = storage.key_prefix(key_prefix);
+    }
+
+    storage.save()?;
     Ok(storage)
 }
 
@@ -51,11 +60,7 @@ fn run(args: &ArgMatches) -> Result<(), Error> {
 
     if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
         let service = new_service(&args)?;
-        let mut storage = new_storage(&cfg, &service)?;
-
-        if let Some(key_prefix) = args.value_of(KEY) {
-            storage = storage.key_prefix(key_prefix);
-        }
+        let storage = new_storage(&cfg, &service, &args)?;
 
         let directories = pull.values_of(DIRECTORY).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
