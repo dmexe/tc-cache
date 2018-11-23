@@ -7,30 +7,34 @@ use serde_json;
 
 use crate::errors::ResultExt;
 use crate::snapshot::{Reading, Unpack};
-use crate::{Config, Error, Stats, Remote};
+use crate::{Config, Error, Stats, Storage};
 
 #[derive(Debug)]
 pub struct Pull<'a, 'b> {
     cfg: &'a Config,
-    remote: &'b Remote,
+    storage: &'b Storage,
     cached_dirs: Vec<PathBuf>,
     unpack_prefix: Option<PathBuf>,
 }
 
 impl<'a, 'b> Pull<'a, 'b> {
     pub fn new<P1, P2>(
-        cfg: &'a Config, 
-        remote: &'b Remote,
-        cached_dirs: Vec<P1>, 
-        unpack_prefix: Option<P2>) -> Self
+        cfg: &'a Config,
+        storage: &'b Storage,
+        cached_dirs: Vec<P1>,
+        unpack_prefix: Option<P2>,
+    ) -> Self
     where
         P1: AsRef<Path>,
         P2: AsRef<Path>,
     {
         Pull {
             cfg,
-            remote,
-            cached_dirs: cached_dirs.iter().map(|it| it.as_ref().to_path_buf()).collect(),
+            storage,
+            cached_dirs: cached_dirs
+                .iter()
+                .map(|it| it.as_ref().to_path_buf())
+                .collect(),
             unpack_prefix: unpack_prefix.map(|it| it.as_ref().to_path_buf()),
         }
     }
@@ -38,15 +42,15 @@ impl<'a, 'b> Pull<'a, 'b> {
     pub fn run(self) -> Result<(), Error> {
         let Self {
             cfg,
-            remote,
+            storage,
             cached_dirs,
             unpack_prefix,
         } = self;
 
-        if !remote.is_empty() {
+        if storage.is_downloable() {
             info!("Attempting to download snapshot ...");
 
-            if let Err(err) = remote.download(&cfg.snapshot_file) {
+            if let Err(err) = storage.download(&cfg.snapshot_file) {
                 error!("{}", err);
             }
         }
@@ -130,8 +134,8 @@ mod tests {
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
 
         let cfg = Config::from(work.as_ref()).unwrap();
-        let remote = Remote::new(&cfg);
-        let command = Pull::new(&cfg, &remote, dirs, Some(dst));
+        let storage = Storage::new(&cfg);
+        let command = Pull::new(&cfg, &storage, dirs, Some(dst));
 
         command.run().unwrap();
     }

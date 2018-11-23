@@ -9,12 +9,13 @@ use rusoto_s3::{self as s3_api, S3Client, S3 as S3Api};
 use url::{Host, Url};
 
 use crate::errors::ResultExt;
-use crate::remote::backend::{Backend, DownloadRequest, UploadRequest};
-use crate::remote::futures_ext::FuturesExt;
+use crate::storage::backend::{Backend, DownloadRequest, UploadRequest};
+use crate::storage::futures_ext::FuturesExt;
 use crate::{mmap, Error};
 
 const S3_URI_SCHEME: &str = "s3";
 const REGION_QUERY_KEY: &str = "region";
+const ENDPOINT_QUERY_KEY: &str = "endpoint";
 const CHUNK_SIZE: usize = 1024 * 1024 * 10; // 10mb
 const CONCURRENCY: usize = 10;
 
@@ -31,7 +32,7 @@ impl S3 {
             Some(Host::Domain(host)) => host.to_string(),
             host => {
                 let err = format!("Unrecognized bucket '{:?}'", host);
-                return Err(Error::remote(err));
+                return Err(Error::storage(err));
             }
         };
 
@@ -47,13 +48,25 @@ impl S3 {
         };
 
         let mut query = uri.query_pairs();
+
         let default_region = query
+            .clone()
             .find(|it| it.0.as_ref() == REGION_QUERY_KEY)
             .map(|it| it.1.to_string());
 
-        let region = match default_region {
-            Some(name) => Region::from_str(name.as_str()).unwrap_or_else(|_| Region::default()),
-            None => Region::default(),
+        let endpoint = query
+            .find(|it| it.0.as_ref() == ENDPOINT_QUERY_KEY)
+            .map(|it| it.1.to_string());
+
+        let region = match (default_region, endpoint) {
+            (_, Some(endpoint)) => Region::Custom {
+                name: "custom".into(),
+                endpoint,
+            },
+            (Some(name), _) => {
+                Region::from_str(name.as_str()).unwrap_or_else(|_| Region::default())
+            }
+            _ => Region::default(),
         };
 
         let s3 = S3 {
@@ -69,19 +82,7 @@ impl S3 {
         S3_URI_SCHEME
     }
 
-    pub fn endpoint<S>(self, endpoint: S) -> Self
-    where
-        S: Into<String>,
-    {
-        let region = Region::Custom {
-            name: self.region.name().to_string(),
-            endpoint: endpoint.into(),
-        };
-
-        Self { region, ..self }
-    }
-
-    fn prefixed<S>(&self, key: S) -> String
+    fn key_prefixed<S>(&self, key: S) -> String
     where
         S: AsRef<str>,
     {
@@ -100,30 +101,30 @@ impl Backend for S3 {
 
         let get_object = s3_api::GetObjectRequest {
             bucket: self.bucket_name.clone(),
-            key: self.prefixed(&req.key),
+            key: self.key_prefixed(&req.key),
             ..Default::default()
         };
 
         let resp = client
             .get_object(get_object)
-            .map_err(Error::remote)
+            .map_err(Error::storage)
             .sync()?;
 
-        let body = resp.body.ok_or_else(|| Error::remote("body must be"))?;
+        let body = resp.body.ok_or_else(|| Error::storage("body must be"))?;
         let content_len = resp
             .content_length
             .map(|it| it as usize)
-            .ok_or_else(|| Error::remote("content length must be"))?;
+            .ok_or_else(|| Error::storage("content length must be"))?;
 
         if content_len < 1 {
             let err = format!("Content length must be positive, got {}", content_len);
-            return Err(Error::remote(err));
+            return Err(Error::storage(err));
         }
 
         let (mut _file, mut dst) = mmap::write(path, content_len)?;
         let mut cursor = Cursor::new(dst.as_mut());
 
-        body.map_err(Error::remote)
+        body.map_err(Error::storage)
             .and_then(|chunk| cursor.write_all(&chunk).io_err(&path))
             .collect()
             .wait()?;
@@ -133,7 +134,7 @@ impl Backend for S3 {
 
     fn upload(&self, req: UploadRequest) -> Result<usize, Error> {
         let client = S3Client::new(self.region.clone());
-        let key = self.prefixed(&req.key);
+        let key = self.key_prefixed(&req.key);
 
         let upload = s3_api::CreateMultipartUploadRequest {
             bucket: self.bucket_name.clone(),
@@ -143,12 +144,12 @@ impl Backend for S3 {
 
         let upload = client
             .create_multipart_upload(upload)
-            .map_err(Error::remote)
+            .map_err(Error::storage)
             .sync()?;
 
         let upload_id = upload
             .upload_id
-            .ok_or_else(|| Error::remote("upload_id cannot be empty"))?;
+            .ok_or_else(|| Error::storage("upload_id cannot be empty"))?;
 
         let (_, len, src) = mmap::read(&req.path, None)?;
 
@@ -178,7 +179,7 @@ impl Backend for S3 {
         let parts = iter_ok(parts)
             .buffered(CONCURRENCY)
             .collect()
-            .map_err(Error::remote)
+            .map_err(Error::storage)
             .sync()?;
 
         let complete = s3_api::CompleteMultipartUploadRequest {
@@ -191,7 +192,7 @@ impl Backend for S3 {
 
         client
             .complete_multipart_upload(complete)
-            .map_err(Error::remote)
+            .map_err(Error::storage)
             .sync()?;
 
         Ok(len)
@@ -206,7 +207,15 @@ impl ToString for S3 {
             buf = format!("{}/{}", buf, prefix);
         };
 
-        format!("{}?region={}", buf, self.region.name())
+        match &self.region {
+            Region::Custom {
+                name: _name,
+                endpoint,
+            } => buf = format!("{}?endpoint={}", buf, endpoint),
+            region => buf = format!("{}?region={}", buf, region.name()),
+        }
+
+        buf
     }
 }
 
@@ -240,6 +249,10 @@ mod tests {
                 "s3://bucket-name",
                 "s3://bucket-name?region="
             ),
+            (
+                "s3://bucket-name/?endpoint=http://localhost:8080",
+                "s3://bucket-name?endpoint=http://localhost:8080"
+            ),
         ];
 
         for (uri, expected) in params {
@@ -263,8 +276,9 @@ mod tests {
             Err(_) => return,
         };
 
-        let uri = Url::parse("s3://bucket/prefix").unwrap();
-        let s3 = S3::from(&uri).unwrap().endpoint(endpoint);
+        let uri = format!("s3://teamcity/cache?endpoint={}", endpoint);
+        let uri = Url::parse(&uri).unwrap();
+        let s3 = S3::from(&uri).unwrap();
         let len = { File::open(&B_FILE_PATH).unwrap().metadata().unwrap().len() as usize };
         let dst = temp_file(".s3");
 

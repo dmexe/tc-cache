@@ -4,20 +4,21 @@ use std::path::PathBuf;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
 use log::{error, info};
-use tc_cache::{pretty, Config, Error, Pull, Push, Remote, Service, Stats, TeamCity};
+use tc_cache::{pretty, Config, Error, Pull, Push, Service, Stats, Storage, TeamCity};
 
 const PULL_COMMAND: &str = "pull";
 const PUSH_COMMAND: &str = "push";
-const PREFIX_ARG: &str = "prefix";
-const HOME_ARG: &str = "home";
-const DIRECTORY_ARG: &str = "directory";
-const TEAMCITY_PROPS_FILE_ARG: &str = "teamcity-build-properties-file";
+const PREFIX: &str = "prefix";
+const HOME: &str = "home";
+const DIRECTORY: &str = "directory";
+const TEAMCITY_PROPS_FILE: &str = "teamcity-props-file";
 const VERBOSE: &str = "verbose";
+const KEY: &str = "key";
 
 fn new_service(cfg: &Config, args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
     let mut service: Option<Box<dyn Service>> = None;
 
-    if let Some(path) = args.value_of(TEAMCITY_PROPS_FILE_ARG) {
+    if let Some(path) = args.value_of(TEAMCITY_PROPS_FILE) {
         let teamcity = TeamCity::from_path(path)?;
         service = Some(teamcity.into_box());
     }
@@ -37,14 +38,14 @@ fn new_service(cfg: &Config, args: &ArgMatches) -> Result<Box<dyn Service>, Erro
 
 fn new_config(args: &ArgMatches) -> Result<Config, Error> {
     let mut cfg = args
-        .value_of(HOME_ARG)
+        .value_of(HOME)
         .map(Config::from)
         .unwrap_or_else(Config::from_env)?;
 
     if args.is_present(VERBOSE) {
         cfg.verbose(true);
     }
-    
+
     Ok(cfg)
 }
 
@@ -52,37 +53,32 @@ fn run(args: &ArgMatches) -> Result<(), Error> {
     env_logger::init();
 
     let cfg = new_config(&args)?;
-    let service = new_service(&cfg, &args)?;
-    let mut remote = Remote::new(&cfg);
 
     if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
-        if service.is_uploadable() {
-            remote.uri(service.remote_url())?;
-            remote.prefix(service.project_id());
+        let service = new_service(&cfg, &args)?;
+        let mut storage = Storage::new(&cfg);
+
+        storage.uri(service.remote_url())?;
+        storage.key_prefix(service.project_id());
+        storage.uploadable(service.is_uploadable());
+
+        if let Some(key_prefix) = args.value_of(KEY) {
+            storage.key_prefix(key_prefix);
         }
-        
-        let directories = pull.values_of(DIRECTORY_ARG).unwrap();
+
+        let directories = pull.values_of(DIRECTORY).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
         let prefix = pull.value_of("prefix").map(PathBuf::from);
-        let pull = Pull::new(&cfg, &remote, directories, prefix);
+        let pull = Pull::new(&cfg, &storage, directories, prefix);
 
         return pull.run();
     };
 
     if let Some(_push) = args.subcommand_matches(PUSH_COMMAND) {
-        if service.is_uploadable() {
-            remote.uri(service.remote_url())?;
-            remote.prefix(service.project_id());
-        }
+        let storage = Storage::load(&cfg.storage_file)?;
+        let push = Push::new(&cfg, &storage);
 
-        let push = Push::new(&cfg, &remote);
-
-        let (_, len) = push.run()?;
-        if let Some(len) = len {
-            info!("Snapshot size - {}", pretty::bytes(len));
-        }
-
-        return Ok(());
+        return push.run().map(|_| ());
     }
 
     Ok(())
@@ -92,14 +88,29 @@ fn main() {
     let pull = SubCommand::with_name(PULL_COMMAND)
         .about("Pull a snapshot from a remote location")
         .arg(
-            Arg::with_name(PREFIX_ARG)
+            Arg::with_name(TEAMCITY_PROPS_FILE)
+                .hidden(true)
+                .long("build-props")
+                .value_name("file")
+                .env("TEAMCITY_BUILD_PROPERTIES_FILE")
+                .help("[advanced] override teamcity's build properties file"),
+        )
+        .arg(
+            Arg::with_name(PREFIX)
                 .long("prefix")
                 .short("p")
                 .value_name("directory")
                 .help("Extract snapshot into specific directory (default '/')"),
         )
         .arg(
-            Arg::with_name(DIRECTORY_ARG)
+            Arg::with_name(KEY)
+                .long("key")
+                .short("p")
+                .value_name("text")
+                .help("Cache key prefix"),
+        )
+        .arg(
+            Arg::with_name(DIRECTORY)
                 .required(true)
                 .min_values(1)
                 .help("A list of directories to cache"),
@@ -115,20 +126,11 @@ fn main() {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::StrictUtf8)
         .arg(
-            Arg::with_name(HOME_ARG)
+            Arg::with_name(HOME)
                 .long("home")
                 .short("d")
                 .value_name("directory")
                 .help("Set working directory (default '~/.tc-cache')")
-                .global(true),
-        )
-        .arg(
-            Arg::with_name(TEAMCITY_PROPS_FILE_ARG)
-                .hidden(true)
-                .long("build-props")
-                .value_name("file")
-                .env("TEAMCITY_BUILD_PROPERTIES_FILE")
-                .help("[advanced] override teamcity's build properties file")
                 .global(true),
         )
         .arg(

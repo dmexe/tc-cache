@@ -6,7 +6,7 @@ services:
     entrypoint: sh
     command: |
       -c '
-      mkdir -p /var/run/minio/bucket &&
+      mkdir -p /var/run/minio/teamcity &&
       minio server /var/run/minio'
     ports:
       - "9000:9000"
@@ -34,4 +34,5 @@ services:
       CARGO_ARGS: "--color always --target=x86_64-unknown-linux-musl"
       AWS_ACCESS_KEY_ID: "accessKey"
       AWS_SECRET_ACCESS_KEY: "secretKey"
+      S3_ENDPOINT: "http://minio:9000"
     working_dir: "/app"

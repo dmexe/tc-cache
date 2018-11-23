@@ -9,7 +9,7 @@ pub enum ErrorKind {
     Io(PathBuf),
     Snapshot(String),
     UnrecognizedService,
-    Remote,
+    Storage,
 }
 
 #[derive(Debug)]
@@ -19,12 +19,12 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn remote<E>(err: E) -> Error
+    pub fn storage<E>(err: E) -> Error
     where
         E: Into<Cause>,
     {
         Error {
-            kind: ErrorKind::Remote,
+            kind: ErrorKind::Storage,
             cause: Some(err.into()),
         }
     }
@@ -91,7 +91,7 @@ impl Display for Error {
             ErrorKind::Io(path) => write!(f, "{} at {:?}", self.description(), path.as_os_str())?,
             ErrorKind::Snapshot(message) => write!(f, "{}; {}", self.description(), message)?,
             ErrorKind::UnrecognizedService => write!(f, "{}", self.description())?,
-            ErrorKind::Remote => write!(f, "{}", self.description())?,
+            ErrorKind::Storage => write!(f, "{}", self.description())?,
         };
 
         let mut cause = self.source();
@@ -110,7 +110,7 @@ impl StdError for Error {
             ErrorKind::Io(_) => "I/O error",
             ErrorKind::Snapshot(_) => "Snapshot error",
             ErrorKind::UnrecognizedService => "Unrecognized service",
-            ErrorKind::Remote => "Remote",
+            ErrorKind::Storage => "Storage error",
         }
     }
 

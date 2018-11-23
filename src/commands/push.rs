@@ -6,20 +6,20 @@ use log::{error, info, warn};
 
 use crate::errors::ResultExt;
 use crate::snapshot::{self, Diff, Entry, Pack, Writing};
-use crate::{mmap, Config, Error, Stats, Remote};
+use crate::{mmap, pretty, Config, Error, Stats, Storage};
 
 pub struct Push<'a, 'b> {
     cfg: &'a Config,
-    remote: &'b Remote,
+    storage: &'b Storage,
 }
 
 impl<'a, 'b> Push<'a, 'b> {
-    pub fn new(cfg: &'a Config, remote: &'b Remote) -> Self {
-        Push { cfg, remote }
+    pub fn new(cfg: &'a Config, storage: &'b Storage) -> Self {
+        Push { cfg, storage }
     }
 
     pub fn run(self) -> Result<(Vec<PathBuf>, Option<usize>), Error> {
-        let Self { cfg, remote } = self;
+        let Self { cfg, storage } = self;
         let mut changed = true;
 
         let cached_dirs = read_cached_dirs(&cfg.cached_dirs_file)?;
@@ -56,13 +56,15 @@ impl<'a, 'b> Push<'a, 'b> {
         let meta = &cfg.snapshot_file.metadata().io_err(&cfg.snapshot_file)?;
         let len = meta.len() as usize;
 
-        if !remote.is_empty() {
+        if storage.is_uploadable() {
             info!("Attempting to upload snapshot ...");
 
-            if let Err(err) = remote.upload(&cfg.snapshot_file, len) {
+            if let Err(err) = storage.upload(&cfg.snapshot_file, len) {
                 error!("{}", err);
             }
         }
+
+        info!("Snapshot size - {}", pretty::bytes(len));
 
         Ok((cached_dirs, Some(len)))
     }
@@ -134,11 +136,11 @@ mod tests {
         let dst = testing::temp_dir();
 
         let cfg = Config::from(&work).unwrap();
-        let remote = Remote::new(&cfg);
+        let storage = Storage::new(&cfg);
 
         let dirs = vec![PathBuf::from(FIXTURES_PATH)];
-        let pull = Pull::new(&cfg, &remote, dirs.clone(), Some(dst));
-        let push = Push::new(&cfg, &remote);
+        let pull = Pull::new(&cfg, &storage, dirs.clone(), Some(dst));
+        let push = Push::new(&cfg, &storage);
 
         pull.run().unwrap();
 

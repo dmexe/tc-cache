@@ -185,7 +185,7 @@ mod tests {
 
         assert_eq!(
             props.key(TC_CACHE_REMOTE_URL).unwrap(),
-            "s3://teamcity/cache?region=eu-west-2",
+            "s3://teamcity/cache?endpoint=http://127.0.0.1:9000",
             "{:?}",
             props
         );
@@ -241,6 +241,9 @@ mod tests {
         );
         assert_eq!(env.project_id(), "Github_Example_Example");
         assert_eq!(env.is_uploadable(), true);
-        assert_eq!(env.remote_url(), "s3://teamcity/cache?region=eu-west-2");
+        assert_eq!(
+            env.remote_url(),
+            "s3://teamcity/cache?endpoint=http://127.0.0.1:9000"
+        );
     }
 }

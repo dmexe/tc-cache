@@ -13,6 +13,7 @@ pub struct Config {
     pub cached_dirs_file: PathBuf,
     pub cached_entries_file: PathBuf,
     pub snapshot_file: PathBuf,
+    pub storage_file: PathBuf,
     pub verbose: bool,
 }
 
@@ -44,11 +45,15 @@ impl Config {
         let mut snapshot_file = working_dir.clone();
         snapshot_file.push(Config::snapshot_file_name());
 
+        let mut storage_file = working_dir.clone();
+        storage_file.push("storage.json");
+
         Ok(Config {
             working_dir,
             cached_dirs_file,
             cached_entries_file,
             snapshot_file,
+            storage_file,
             verbose: false,
         })
     }

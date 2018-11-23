@@ -11,10 +11,10 @@ mod errors;
 mod hashing;
 mod mmap;
 pub mod pretty;
-mod remote;
 mod services;
 mod snapshot;
 mod stats;
+mod storage;
 
 #[cfg(test)]
 mod testing;
@@ -22,6 +22,6 @@ mod testing;
 pub use self::commands::{Pull, Push};
 pub use self::config::Config;
 pub use self::errors::{Error, ErrorKind};
-pub use self::remote::Remote;
 pub use self::services::{Service, TeamCity};
 pub use self::stats::Stats;
+pub use self::storage::Storage;
