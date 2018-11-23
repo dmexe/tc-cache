@@ -115,9 +115,9 @@ fn main() {
     let push =
         SubCommand::with_name(PUSH_COMMAND).about("Push cached directories into remote location");
 
-    let app = App::new("TeamCity build cache CLI")
-        .bin_name("tc-cache")
-        .version("0.1")
+    let app = App::new(env!("CARGO_PKG_DESCRIPTION"))
+        .bin_name(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
         .setting(AppSettings::ColorAuto)
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::StrictUtf8)
