@@ -60,7 +60,7 @@ fn run(args: &ArgMatches) -> Result<(), Error> {
 
     if let Some(pull) = args.subcommand_matches(PULL_COMMAND) {
         let service = new_service(&args)?;
-        let storage = new_storage(&cfg, &service, &args)?;
+        let storage = new_storage(&cfg, &service, &pull)?;
 
         let directories = pull.values_of(DIRECTORY).unwrap();
         let directories = directories.map(PathBuf::from).collect::<Vec<_>>();
