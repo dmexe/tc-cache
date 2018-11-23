@@ -20,12 +20,10 @@ services:
     build:
       context: scripts/nigthly_musl
     command: 
-      - "./scripts/nigthly_musl/build.sh"
+      - "/app/scripts/nigthly_musl/build.sh"
     volumes:
       - "./:/app"
     environment:
-      TARGET: "x86_64-unknown-linux-musl"
-      CARGO_ARGS: "--color always --target=x86_64-unknown-linux-musl"
       AWS_ACCESS_KEY_ID: "accessKey"
       AWS_SECRET_ACCESS_KEY: "secretKey"
       S3_ENDPOINT: "http://minio:9000"
