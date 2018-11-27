@@ -100,6 +100,7 @@ fn is_cacheable<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
 }
 
 fn try_is_cacheable(path: &Path) -> Result<Option<PathBuf>, Error> {
+    let mut created = false;
     let log_err = |err| {
         error!("{}", err);
         err
@@ -108,6 +109,7 @@ fn try_is_cacheable(path: &Path) -> Result<Option<PathBuf>, Error> {
     if !path.exists() {
         info!("Path {:?} isn't exist, creating", path.as_os_str());
         fs::create_dir_all(&path).io_err(&path).map_err(log_err)?;
+        created = true;
     }
 
     let path = path.canonicalize().io_err(&path).map_err(log_err)?;
@@ -118,7 +120,9 @@ fn try_is_cacheable(path: &Path) -> Result<Option<PathBuf>, Error> {
         return Ok(None);
     }
 
-    info!("Add {:?} to cache", path.as_os_str());
+    if !created {
+        info!("Add {:?} to cache", path.as_os_str());
+    }
 
     Ok(Some(path))
 }
