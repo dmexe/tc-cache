@@ -28,6 +28,11 @@ impl<'a, 'b> Push<'a, 'b> {
             return Ok((cached_dirs, None));
         }
 
+        if !storage.is_uploadable() {
+            info!("Ignore branch, exiting");
+            return Ok((cached_dirs, None));
+        }
+
         let previous_entries = read_cached_entries(&cfg.cached_entries_file)?;
         let current_entries = {
             info!("Walking cached directories ...");
