@@ -86,8 +86,10 @@ where
     P: AsRef<Path>,
 {
     let meta = fs::symlink_metadata(&path).io_err(&path)?;
+
     let mut perm = meta.permissions();
     perm.set_mode(attr.mode);
+    fs::set_permissions(&path, perm).io_err(&path)?;
 
     let atime = FileTime::from_unix_time(attr.atime, 0);
     let mtime = FileTime::from_unix_time(attr.mtime, 0);
@@ -122,8 +124,10 @@ fn prefixed(prefix: Option<PathBuf>) -> impl Fn(&Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    use std::os::unix::fs::MetadataExt;
+
     use crate::snapshot::{Pack, Writing};
-    use crate::testing::{self, FIXTURES_PATH};
+    use crate::testing::{self, A_FILE_PATH, FIXTURES_PATH, IS_BIN_PATH, IS_DIR_PATH};
 
     #[test]
     fn is_include() {
@@ -156,8 +160,8 @@ mod tests {
     }
 
     #[test]
-    fn unpack() {
-        let src = testing::temp_file(".sn");
+    fn unpack_create_files() {
+        let src = testing::temp_file(".snappy");
         let dst = testing::temp_dir();
         let dirs = vec![Path::new(FIXTURES_PATH)];
 
@@ -172,5 +176,38 @@ mod tests {
             .unwrap();
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn unpack_restore_permissions() {
+        let src = testing::temp_file(".snappy");
+        let dst = testing::temp_dir();
+        let dirs = vec![Path::new(FIXTURES_PATH)];
+
+        let snapshot = Writing::open(&src).unwrap();
+        snapshot.pack(&dirs).unwrap();
+
+        let snapshot = Reading::open(&src).unwrap();
+        snapshot
+            .unpack(Some(dst.as_ref().to_path_buf()), &dirs)
+            .unwrap();
+
+        {
+            let a_file = dst.as_ref().to_path_buf().join(&A_FILE_PATH);
+            let perm = fs::symlink_metadata(&a_file).unwrap();
+            assert_eq!(perm.mode() & 0xfff, 0o644);
+        }
+
+        {
+            let bin_file = dst.as_ref().to_path_buf().join(&IS_BIN_PATH);
+            let perm = fs::symlink_metadata(&bin_file).unwrap();
+            assert_eq!(perm.mode() & 0xfff, 0o755);
+        }
+
+        {
+            let dir_file = dst.as_ref().to_path_buf().join(&IS_DIR_PATH);
+            let perm = fs::symlink_metadata(&dir_file).unwrap();
+            assert_eq!(perm.mode() & 0xfff, 0o755);
+        }
     }
 }

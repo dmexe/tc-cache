@@ -271,6 +271,14 @@ impl Entry {
             Entry::Dir { path, .. } => path.as_path(),
         }
     }
+
+    pub fn as_attr(&self) -> &Attributes {
+        match self {
+            Entry::Dir { ref attr, .. } => &attr,
+            Entry::Symlink { ref attr, .. } => &attr,
+            Entry::File { ref attr, .. } => &attr,
+        }
+    }
 }
 
 impl AsRef<Path> for Entry {
@@ -333,7 +341,7 @@ mod tests {
             .map(|it| {
                 let kind = it.kind();
                 let md5 = it.as_md5().map(String::from).unwrap_or_default();
-                let path = it.as_ref().to_path_buf();
+                let path = it.as_path().to_path_buf();
                 (kind, md5, path)
             })
             .collect::<Vec<_>>();
@@ -345,6 +353,7 @@ mod tests {
             (Dir,     "".into(),                                 "tests/fixtures/snapshot".into()),
             (File,    "0cc175b9c0f1b6a831c399e269772661".into(), "tests/fixtures/snapshot/a.txt".into()),
             (File,    "54510be579370aa078fbb9c5d9eed53a".into(), "tests/fixtures/snapshot/b.txt".into()),
+            (File,    "33e4fd94e2560e008e2c3b431d0e3419".into(), "tests/fixtures/snapshot/is_bin".into()),
             (Dir,     "".into(),                                 "tests/fixtures/snapshot/is_dir".into()),
             (Dir,     "".into(),                                 "tests/fixtures/snapshot/is_dir".into()),
             (File,    "d41d8cd98f00b204e9800998ecf8427e".into(), "tests/fixtures/snapshot/is_dir/.keep".into()),
