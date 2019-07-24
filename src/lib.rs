@@ -1,6 +1,4 @@
-#![feature(try_from)]
 #![feature(integer_atomics)]
-#![feature(duration_as_u128)]
 #![warn(rust_2018_idioms)]
 #![allow(unstable_name_collisions)]
 
