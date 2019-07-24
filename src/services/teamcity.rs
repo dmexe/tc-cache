@@ -22,13 +22,15 @@ pub struct TeamCity {
     remote_url: String,
 }
 
+type EnvMap = HashMap<String, String>;
+
 impl TeamCity {
     #[inline]
-    pub fn is_available(env: &HashMap<String, String>) -> bool {
+    pub fn is_available(env: &EnvMap) -> bool {
         env.contains_key(TEAMCITY_BUILD_PROPERTIES_FILE)
     }
 
-    pub fn from_env(env: &HashMap<String, String>) -> Result<Self, Error> {
+    pub fn from_env(env: &EnvMap) -> Result<Self, Error> {
         let props_path = match env.get(TEAMCITY_BUILD_PROPERTIES_FILE) {
             Some(val) => val,
             None => {
@@ -41,10 +43,10 @@ impl TeamCity {
         };
 
         let props_path = Path::new(props_path);
-        TeamCity::from_path(props_path)
+        TeamCity::from_path(env, props_path)
     }
 
-    pub fn from_path<P>(path: P) -> Result<Self, Error>
+    pub fn from_path<P>(env: &EnvMap, path: P) -> Result<Self, Error>
     where
         P: AsRef<Path>,
     {
@@ -58,8 +60,10 @@ impl TeamCity {
         let server_url = props.key(TEAMCITY_SERVER_URL)?;
         let project_id = props.key(TEAMCITY_PROJECT_ID)?.to_string();
 
-        let is_default_branch = props
-            .key(TEAMCITY_BUILD_BRANCH_IS_DEFAULT)
+        let is_default_branch = env
+            .get(TEAMCITY_BUILD_BRANCH_IS_DEFAULT)
+            .map(|it| it.as_str())
+            .or_else(|| props.key(TEAMCITY_BUILD_BRANCH_IS_DEFAULT).ok())
             .map(|it| it == "true")
             .unwrap_or(false);
 

@@ -28,7 +28,7 @@ impl ServiceFactory {
         P: AsRef<Path>,
     {
         if let Some(path) = teamcity_build_properties_path {
-            let teamcity = TeamCity::from_path(path)?;
+            let teamcity = TeamCity::from_path(env, path)?;
             return Ok(teamcity.into_box());
         }
 
