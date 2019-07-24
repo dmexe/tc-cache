@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use env_logger;
-use log::{error, info};
+use log::{error, info, LevelFilter};
 use tc_cache::{Config, Error, Pull, Push, Service, ServiceFactory, Stats, Storage};
 
 const PULL_COMMAND: &str = "pull";
@@ -12,8 +12,8 @@ const PREFIX: &str = "prefix";
 const HOME: &str = "home";
 const DIRECTORY: &str = "directory";
 const TEAMCITY_PROPS_FILE: &str = "teamcity-props-file";
-const VERBOSE: &str = "verbose";
 const KEY: &str = "key";
+const VERBOSE: &str = "verbose";
 
 fn new_service(args: &ArgMatches) -> Result<Box<dyn Service>, Error> {
     let env = env::vars().collect();
@@ -53,8 +53,20 @@ fn new_storage(
     Ok(storage)
 }
 
+fn init_logger(args: &ArgMatches) {
+    let log_level = if args.is_present(VERBOSE) {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+
+    env_logger::Builder::from_default_env()
+        .filter_level(log_level)
+        .init();
+}
+
 fn run(args: &ArgMatches) -> Result<(), Error> {
-    env_logger::init();
+    init_logger(args);
 
     let cfg = new_config(&args)?;
 
