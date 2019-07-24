@@ -108,4 +108,10 @@ mod tests {
             .unwrap();
         assert_eq!(hash, "54510be579370aa078fbb9c5d9eed53a")
     }
+
+    #[test]
+    fn md5_for_file_path() {
+        let hash = md5::path(A_FILE_PATH).unwrap();
+        assert_eq!(hash, "0cc175b9c0f1b6a831c399e269772661")
+    }
 }
